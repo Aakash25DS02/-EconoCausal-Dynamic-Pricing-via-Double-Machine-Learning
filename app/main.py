@@ -10,8 +10,22 @@ app = FastAPI(
     version="0.1.0",
 )
 
-BACKEND_DIR = Path(__file__).resolve().parents[1]
-DATA_PATH = BACKEND_DIR / "data" / "pricing_data.csv"
+# Find the dataset in the existing project folder structure.
+PROJECT_DIR = Path(__file__).resolve().parent
+
+DATA_CANDIDATES = [
+    PROJECT_DIR / "data" / "pricing_data.csv",
+    PROJECT_DIR / "pricing_data.csv",
+    PROJECT_DIR.parent / "data" / "pricing_data.csv",
+    PROJECT_DIR.parent / "backend" / "data" / "pricing_data.csv",
+    PROJECT_DIR.parent.parent / "data" / "pricing_data.csv",
+    PROJECT_DIR.parent.parent / "backend" / "data" / "pricing_data.csv",
+]
+
+DATA_PATH = next(
+    (path for path in DATA_CANDIDATES if path.exists()),
+    PROJECT_DIR / "data" / "pricing_data.csv",
+)
 
 REQUIRED_COLUMNS = [
     "price",
@@ -24,10 +38,19 @@ def load_dataset() -> pd.DataFrame:
     if not DATA_PATH.exists():
         raise HTTPException(
             status_code=404,
-            detail="Dataset not found. Run python generate_data.py first.",
+            detail=(
+                "Dataset not found. Run generate_data.py "
+                "and ensure pricing_data.csv is in the project data folder."
+            ),
         )
 
-    df = pd.read_csv(DATA_PATH)
+    try:
+        df = pd.read_csv(DATA_PATH)
+    except (OSError, pd.errors.ParserError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not read the pricing dataset: {exc}",
+        ) from exc
 
     missing_columns = [
         column for column in REQUIRED_COLUMNS
@@ -40,6 +63,18 @@ def load_dataset() -> pd.DataFrame:
             detail=f"Missing required columns: {missing_columns}",
         )
 
+    if df.empty:
+        raise HTTPException(
+            status_code=422,
+            detail="The pricing dataset contains no records.",
+        )
+
+    if df[REQUIRED_COLUMNS].isnull().any().any():
+        raise HTTPException(
+            status_code=422,
+            detail="Required columns contain missing values.",
+        )
+
     return df
 
 
@@ -48,6 +83,7 @@ def root():
     return {
         "project": "EconoCausal",
         "message": "Dynamic pricing and causal analysis API",
+        "version": "0.1.0",
         "docs": "/docs",
     }
 
@@ -62,9 +98,13 @@ def data_summary():
     df = load_dataset()
 
     return {
+        "dataset_path": str(DATA_PATH),
         "rows": len(df),
         "columns": list(df.columns),
-        "missing_values": df.isnull().sum().to_dict(),
+        "missing_values": {
+            column: int(count)
+            for column, count in df.isnull().sum().items()
+        },
         "purchase_rate": round(float(df["purchase"].mean()), 4),
         "average_discount": round(float(df["discount"].mean()), 4),
         "average_price": round(float(df["price"].mean()), 2),
@@ -78,4 +118,6 @@ def data_summary():
 @app.get("/data/preview")
 def data_preview():
     df = load_dataset()
-    return {"records": df.head(10).to_dict(orient="records")}
+    return {
+        "records": df.head(10).to_dict(orient="records")
+    }
