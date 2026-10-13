@@ -2,6 +2,7 @@ import { useState } from 'react'
 import DataUpload from './pages/DataUpload.jsx'
 import BudgetSettings from './pages/BudgetSettings.jsx'
 import Dashboard from './pages/Dashboard.jsx'
+import TreatmentEffects from './pages/TreatmentEffects.jsx'
 import './index.css'
 
 export default function App () {
@@ -47,7 +48,7 @@ export default function App () {
         )}
 
         {activePage === 'Data Upload' && (
-          <DataUpload onDatasetLoaded={setDataset} />
+          <DataUpload dataset={dataset} onDatasetLoaded={setDataset} />
         )}
 
         {activePage === 'Budget Settings' && (
@@ -55,16 +56,7 @@ export default function App () {
         )}
 
         {activePage === 'Treatment Effects' && (
-          <section className='panel'>
-            <h2>Treatment Effect Analysis</h2>
-            <p>
-              Estimated effects and charts will appear here when model results
-              are available.
-            </p>
-            <div className='chart-placeholder'>
-              Treatment effect visualization
-            </div>
-          </section>
+          <TreatmentEffects dataset={dataset} />
         )}
       </main>
     </div>
