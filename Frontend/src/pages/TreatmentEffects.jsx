@@ -1,19 +1,14 @@
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend
-} from 'recharts'
+import Plot from 'react-plotly.js'
 
-export default function TreatmentEffects ({ dataset }) {
+export default function TreatmentEffects({ dataset }) {
   const hasPriceAndSales =
     dataset?.rows?.length > 0 &&
-    dataset.columns?.some(column => column.toLowerCase() === 'price') &&
-    dataset.columns?.some(column => column.toLowerCase() === 'sales')
+    dataset.columns?.some(
+      column => column.toLowerCase() === 'price'
+    ) &&
+    dataset.columns?.some(
+      column => column.toLowerCase() === 'sales'
+    )
 
   const chartData = hasPriceAndSales
     ? dataset.rows
@@ -21,192 +16,201 @@ export default function TreatmentEffects ({ dataset }) {
           price: Number(row.price),
           sales: Number(row.sales)
         }))
-        .filter(row => Number.isFinite(row.price) && Number.isFinite(row.sales))
+        .filter(
+          row =>
+            Number.isFinite(row.price) &&
+            Number.isFinite(row.sales)
+        )
         .sort((a, b) => a.price - b.price)
     : []
 
   const upliftPreviewData =
     chartData.length > 1
       ? (() => {
-          const minSales = Math.min(...chartData.map(row => row.sales))
-          const maxSales = Math.max(...chartData.map(row => row.sales))
-          const range = maxSales - minSales || 1
+          const sales = chartData.map(row => row.sales)
+          const min = Math.min(...sales)
+          const range = Math.max(...sales) - min || 1
 
           return chartData.map((row, index) => ({
-            population: Number(
-              (((index + 1) / chartData.length) * 100).toFixed(1)
-            ),
-            uplift: Number((((row.sales - minSales) / range) * 100).toFixed(2))
+            population: ((index + 1) / chartData.length) * 100,
+            uplift: ((row.sales - min) / range) * 100
           }))
         })()
       : []
 
-  const qiniPreviewData =
-    chartData.length > 1
-      ? (() => {
-          const minSales = Math.min(...chartData.map(row => row.sales))
-          const maxSales = Math.max(...chartData.map(row => row.sales))
-          const range = maxSales - minSales || 1
+  const qiniPreviewData = upliftPreviewData.map(point => ({
+    population: point.population,
+    model: (point.uplift * point.population) / 100,
+    baseline: point.population * 0.5
+  }))
 
-          return chartData.map((row, index) => {
-            const population = ((index + 1) / chartData.length) * 100
+  const plotLayout = {
+    autosize: true,
+    margin: { l: 60, r: 25, t: 25, b: 65 },
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { family: 'Arial, sans-serif', size: 12 },
+    xaxis: { gridcolor: '#e5e7eb' },
+    yaxis: { gridcolor: '#e5e7eb' },
+    legend: { orientation: 'h', y: -0.25 }
+  }
 
-            const normalizedSales = (row.sales - minSales) / range
-
-            return {
-              population: Number(population.toFixed(1)),
-              model: Number((normalizedSales * population).toFixed(2)),
-              baseline: Number((population * 0.5).toFixed(2))
-            }
-          })
-        })()
-      : []
+  const plotConfig = {
+    responsive: true,
+    displaylogo: false
+  }
 
   return (
-    <div className='page'>
+    <div className="page">
       <h1>Treatment Effects</h1>
       <p>
-        Explore the relationship between pricing and sales, and review estimated
-        effects when model results become available.
+        Explore observed pricing and sales data and review
+        treatment-effect results when the model is connected.
       </p>
 
-      <section className='panel'>
+      <section className="panel">
         <h2>Price vs Sales</h2>
         <p>
-          This chart shows the observed relationship in your uploaded data. It
-          does not establish that price causes sales to change.
+          This chart shows an observed relationship. It does not
+          establish that price causes sales to change.
         </p>
 
         {chartData.length > 0 ? (
-          <div style={{ width: '100%', height: 320 }}>
-            <ResponsiveContainer width='100%' height='100%'>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray='3 3' />
-                <XAxis
-                  dataKey='price'
-                  type='number'
-                  label={{
-                    value: 'Price',
-                    position: 'insideBottom',
-                    offset: -5
-                  }}
-                />
-                <YAxis
-                  label={{
-                    value: 'Sales',
-                    angle: -90,
-                    position: 'insideLeft'
-                  }}
-                />
-                <Tooltip />
-                <Legend />
-                <Line
-                  type='monotone'
-                  dataKey='sales'
-                  name='Observed sales'
-                  stroke='#2563eb'
-                  strokeWidth={2}
-                  dot
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          <Plot
+            data={[
+              {
+                x: chartData.map(row => row.price),
+                y: chartData.map(row => row.sales),
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Observed sales',
+                line: { color: '#2563eb', width: 2 },
+                marker: { size: 7 }
+              }
+            ]}
+            layout={{
+              ...plotLayout,
+              height: 320,
+              xaxis: {
+                ...plotLayout.xaxis,
+                title: 'Price'
+              },
+              yaxis: {
+                ...plotLayout.yaxis,
+                title: 'Sales'
+              }
+            }}
+            config={plotConfig}
+            useResizeHandler
+            style={{ width: '100%' }}
+          />
         ) : (
           <p>
-            Upload a CSV containing columns named price and sales to display
-            this chart.
+            Upload a CSV containing valid price and sales columns
+            to display this chart.
           </p>
         )}
       </section>
 
-      <section className='panel'>
+      <section className="panel">
         <h2>Uplift Curve</h2>
         <p>
-          Data-dependent preview based on uploaded sales values. This is not an
-          estimated causal uplift curve.
+          Illustrative preview calculated from uploaded sales values,
+          not a genuine causal uplift curve.
         </p>
 
-        <div style={{ width: '100%', height: 320 }}>
-          <ResponsiveContainer width='100%' height='100%'>
-            <LineChart data={upliftPreviewData}>
-              <CartesianGrid strokeDasharray='3 3' />
-              <XAxis
-                dataKey='population'
-                type='number'
-                domain={[0, 100]}
-                label={{
-                  value: 'Customers Selected (%)',
-                  position: 'insideBottom',
-                  offset: -5
-                }}
-              />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line
-                type='monotone'
-                dataKey='uplift'
-                name='Illustrative uplift'
-                stroke='#7c3aed'
-                strokeWidth={2}
-                dot
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+        {upliftPreviewData.length > 1 ? (
+          <Plot
+            data={[
+              {
+                x: upliftPreviewData.map(p => p.population),
+                y: upliftPreviewData.map(p => p.uplift),
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Illustrative preview',
+                line: { color: '#7c3aed', width: 2 }
+              }
+            ]}
+            layout={{
+              ...plotLayout,
+              height: 320,
+              xaxis: {
+                ...plotLayout.xaxis,
+                title: 'Customers Selected (%)',
+                range: [0, 100]
+              },
+              yaxis: {
+                ...plotLayout.yaxis,
+                title: 'Normalized Sales (%)'
+              }
+            }}
+            config={plotConfig}
+            useResizeHandler
+            style={{ width: '100%' }}
+          />
+        ) : (
+          <p>Upload at least two valid price and sales rows to view this preview.</p>
+        )}
       </section>
 
-      <section className='panel'>
+      <section className="panel">
         <h2>Qini Curve</h2>
         <p>
-          Data-dependent preview compared with a reference line. This is not a
-          statistically calculated Qini curve.
+          Illustrative comparison only. The actual Qini curve requires
+          treatment labels, outcomes, and model predictions.
         </p>
 
-        <div style={{ width: '100%', height: 320 }}>
-          <ResponsiveContainer width='100%' height='100%'>
-            <LineChart data={qiniPreviewData}>
-              <CartesianGrid strokeDasharray='3 3' />
-              <XAxis
-                dataKey='population'
-                type='number'
-                domain={[0, 100]}
-                label={{
-                  value: 'Customers Selected (%)',
-                  position: 'insideBottom',
-                  offset: -5
-                }}
-              />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line
-                type='monotone'
-                dataKey='model'
-                name='Illustrative model'
-                stroke='#2563eb'
-                strokeWidth={2}
-                dot
-              />
-              <Line
-                type='monotone'
-                dataKey='baseline'
-                name='Illustrative baseline'
-                stroke='#64748b'
-                strokeDasharray='5 5'
-                strokeWidth={2}
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+        {qiniPreviewData.length > 1 ? (
+          <Plot
+            data={[
+              {
+                x: qiniPreviewData.map(p => p.population),
+                y: qiniPreviewData.map(p => p.model),
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Illustrative preview',
+                line: { color: '#2563eb', width: 2 }
+              },
+              {
+                x: qiniPreviewData.map(p => p.population),
+                y: qiniPreviewData.map(p => p.baseline),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Reference line',
+                line: {
+                  color: '#64748b',
+                  dash: 'dash',
+                  width: 2
+                }
+              }
+            ]}
+            layout={{
+              ...plotLayout,
+              height: 320,
+              xaxis: {
+                ...plotLayout.xaxis,
+                title: 'Customers Selected (%)',
+                range: [0, 100]
+              },
+              yaxis: {
+                ...plotLayout.yaxis,
+                title: 'Illustrative Score'
+              }
+            }}
+            config={plotConfig}
+            useResizeHandler
+            style={{ width: '100%' }}
+          />
+        ) : (
+          <p>Upload at least two valid price and sales rows to view this preview.</p>
+        )}
       </section>
 
-      <section className='panel'>
+      <section className="panel">
         <h2>Estimated Treatment Effect</h2>
         <p>
-          The Double Machine Learning model's estimated price effect will appear
-          here when its results are connected.
+          The Double Machine Learning estimate will appear here
+          when the backend API is connected.
         </p>
         <p>
           <strong>Status:</strong> Waiting for model results
