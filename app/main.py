@@ -4,13 +4,14 @@ from pathlib import Path
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 
+from discount_optimizer import recommend_discount
+
 app = FastAPI(
     title="EconoCausal API",
-    description="Backend for causal discount analysis and budget-aware pricing.",
-    version="0.1.0",
+    description="Backend for discount analysis and pricing recommendations.",
+    version="0.2.0",
 )
 
-# Find the dataset in the existing project folder structure.
 PROJECT_DIR = Path(__file__).resolve().parent
 
 DATA_CANDIDATES = [
@@ -24,14 +25,10 @@ DATA_CANDIDATES = [
 
 DATA_PATH = next(
     (path for path in DATA_CANDIDATES if path.exists()),
-    PROJECT_DIR / "data" / "pricing_data.csv",
+    PROJECT_DIR.parent / "data" / "pricing_data.csv",
 )
 
-REQUIRED_COLUMNS = [
-    "price",
-    "discount",
-    "purchase",
-]
+REQUIRED_COLUMNS = ["price", "discount", "purchase"]
 
 
 def load_dataset() -> pd.DataFrame:
@@ -39,8 +36,8 @@ def load_dataset() -> pd.DataFrame:
         raise HTTPException(
             status_code=404,
             detail=(
-                "Dataset not found. Run generate_data.py "
-                "and ensure pricing_data.csv is in the project data folder."
+                "Dataset not found. Ensure pricing_data.csv "
+                "exists in the project data folder."
             ),
         )
 
@@ -83,7 +80,7 @@ def root():
     return {
         "project": "EconoCausal",
         "message": "Dynamic pricing and causal analysis API",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "docs": "/docs",
     }
 
@@ -121,3 +118,19 @@ def data_preview():
     return {
         "records": df.head(10).to_dict(orient="records")
     }
+
+
+@app.get("/discount/recommendation")
+def discount_recommendation():
+    try:
+        return recommend_discount()
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
