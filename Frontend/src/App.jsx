@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import DataUpload from './pages/DataUpload.jsx'
 import BudgetSettings from './pages/BudgetSettings.jsx'
+import BudgetAllocation from './pages/BudgetAllocation.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import TreatmentEffects from './pages/TreatmentEffects.jsx'
 import './index.css'
@@ -14,6 +15,7 @@ export default function App () {
     'Dashboard',
     'Data Upload',
     'Budget Settings',
+    'Budget Allocation',
     'Treatment Effects'
   ]
 
@@ -53,6 +55,10 @@ export default function App () {
 
         {activePage === 'Budget Settings' && (
           <BudgetSettings budget={budget} onSave={setBudget} />
+        )}
+
+        {activePage === 'Budget Allocation' && (
+          <BudgetAllocation budget={budget} />
         )}
 
         {activePage === 'Treatment Effects' && (
