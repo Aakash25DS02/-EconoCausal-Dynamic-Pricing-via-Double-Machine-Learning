@@ -1,4 +1,4 @@
-
+﻿
 import {
   ResponsiveContainer,
   PieChart,
@@ -20,7 +20,7 @@ const allocationPercentages = [
 ];
 
 function formatCurrency(value) {
-  return `Γé╣${value.toLocaleString("en-IN", {
+  return `╬ô├⌐Γòú${value.toLocaleString("en-IN", {
     maximumFractionDigits: 2
   })}`;
 }
