@@ -5,6 +5,7 @@ from sklearn.model_selection import train_test_split
 from econml.dml import LinearDML
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
+from effect_summary import summarize_effects
 
 
 def main():
@@ -57,6 +58,7 @@ def main():
     # Estimated change in purchase probability for a 10 percentage-point
     # increase in discount, at the observed feature values.
     effects = model.effect(X_test, T0=T_test, T1=T_test + 0.10)
+    summarize_effects(effects)
 
     print(f"Rows used: {len(df)}")
     print(f"Test rows: {len(X_test)}")
