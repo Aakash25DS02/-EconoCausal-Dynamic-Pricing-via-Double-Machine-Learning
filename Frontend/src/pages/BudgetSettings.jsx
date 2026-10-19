@@ -41,13 +41,13 @@ export default function BudgetSettings({ budget, onSave }) {
           required
         />
 
-        <button className="save-button" type="submit">
+        <button type="submit" className="primary-button">
           Save Budget
         </button>
       </form>
 
       {message && (
-        <p role="status" style={{ color: "#244c91" }}>
+        <p role="status" style={{ color: "#087f78" }}>
           {message}
         </p>
       )}

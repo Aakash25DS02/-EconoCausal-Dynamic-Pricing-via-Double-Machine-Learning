@@ -1,14 +1,10 @@
 import Plot from 'react-plotly.js'
 
-export default function TreatmentEffects({ dataset }) {
+export default function TreatmentEffects ({ dataset }) {
   const hasPriceAndSales =
     dataset?.rows?.length > 0 &&
-    dataset.columns?.some(
-      column => column.toLowerCase() === 'price'
-    ) &&
-    dataset.columns?.some(
-      column => column.toLowerCase() === 'sales'
-    )
+    dataset.columns?.some(column => column.toLowerCase() === 'price') &&
+    dataset.columns?.some(column => column.toLowerCase() === 'sales')
 
   const chartData = hasPriceAndSales
     ? dataset.rows
@@ -16,11 +12,7 @@ export default function TreatmentEffects({ dataset }) {
           price: Number(row.price),
           sales: Number(row.sales)
         }))
-        .filter(
-          row =>
-            Number.isFinite(row.price) &&
-            Number.isFinite(row.sales)
-        )
+        .filter(row => Number.isFinite(row.price) && Number.isFinite(row.sales))
         .sort((a, b) => a.price - b.price)
     : []
 
@@ -37,6 +29,20 @@ export default function TreatmentEffects({ dataset }) {
           }))
         })()
       : []
+
+  const validObservationCount = chartData.length
+
+  const averagePrice =
+    validObservationCount > 0
+      ? chartData.reduce((sum, row) => sum + row.price, 0) /
+        validObservationCount
+      : null
+
+  const averageSales =
+    validObservationCount > 0
+      ? chartData.reduce((sum, row) => sum + row.sales, 0) /
+        validObservationCount
+      : null
 
   const qiniPreviewData = upliftPreviewData.map(point => ({
     population: point.population,
@@ -61,18 +67,35 @@ export default function TreatmentEffects({ dataset }) {
   }
 
   return (
-    <div className="page">
+    <div className='page'>
       <h1>Treatment Effects</h1>
       <p>
-        Explore observed pricing and sales data and review
-        treatment-effect results when the model is connected.
+        Explore observed pricing and sales data and review treatment-effect
+        results when the model is connected.
       </p>
 
-      <section className="panel">
+      <div className='stats-grid'>
+        <div className='panel'>
+          <p>Valid Observations</p>
+          <h2>{validObservationCount}</h2>
+        </div>
+
+        <div className='panel'>
+          <p>Average Price</p>
+          <h2>{averagePrice === null ? '—' : averagePrice.toFixed(2)}</h2>
+        </div>
+
+        <div className='panel'>
+          <p>Average Sales</p>
+          <h2>{averageSales === null ? '—' : averageSales.toFixed(2)}</h2>
+        </div>
+      </div>
+
+      <section className='panel'>
         <h2>Price vs Sales</h2>
         <p>
-          This chart shows an observed relationship. It does not
-          establish that price causes sales to change.
+          This chart shows an observed relationship. It does not establish that
+          price causes sales to change.
         </p>
 
         {chartData.length > 0 ? (
@@ -106,17 +129,17 @@ export default function TreatmentEffects({ dataset }) {
           />
         ) : (
           <p>
-            Upload a CSV containing valid price and sales columns
-            to display this chart.
+            Upload a CSV containing valid price and sales columns to display
+            this chart.
           </p>
         )}
       </section>
 
-      <section className="panel">
+      <section className='panel'>
         <h2>Uplift Curve</h2>
         <p>
-          Illustrative preview calculated from uploaded sales values,
-          not a genuine causal uplift curve.
+          Illustrative preview calculated from uploaded sales values, not a
+          genuine causal uplift curve.
         </p>
 
         {upliftPreviewData.length > 1 ? (
@@ -149,15 +172,17 @@ export default function TreatmentEffects({ dataset }) {
             style={{ width: '100%' }}
           />
         ) : (
-          <p>Upload at least two valid price and sales rows to view this preview.</p>
+          <p>
+            Upload at least two valid price and sales rows to view this preview.
+          </p>
         )}
       </section>
 
-      <section className="panel">
+      <section className='panel'>
         <h2>Qini Curve</h2>
         <p>
-          Illustrative comparison only. The actual Qini curve requires
-          treatment labels, outcomes, and model predictions.
+          Illustrative comparison only. The actual Qini curve requires treatment
+          labels, outcomes, and model predictions.
         </p>
 
         {qiniPreviewData.length > 1 ? (
@@ -202,15 +227,17 @@ export default function TreatmentEffects({ dataset }) {
             style={{ width: '100%' }}
           />
         ) : (
-          <p>Upload at least two valid price and sales rows to view this preview.</p>
+          <p>
+            Upload at least two valid price and sales rows to view this preview.
+          </p>
         )}
       </section>
 
-      <section className="panel">
+      <section className='panel'>
         <h2>Estimated Treatment Effect</h2>
         <p>
-          The Double Machine Learning estimate will appear here
-          when the backend API is connected.
+          The Double Machine Learning estimate will appear here when the backend
+          API is connected.
         </p>
         <p>
           <strong>Status:</strong> Waiting for model results

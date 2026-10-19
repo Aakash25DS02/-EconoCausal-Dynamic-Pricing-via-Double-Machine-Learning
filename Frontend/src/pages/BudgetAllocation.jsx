@@ -19,11 +19,15 @@ const allocationPercentages = [
   { name: "Customer Group C", percentage: 25, color: "#0d9488" }
 ];
 
+
 function formatCurrency(value) {
-  return `╬ô├⌐Γòú${value.toLocaleString("en-IN", {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
     maximumFractionDigits: 2
-  })}`;
+  }).format(value);
 }
+
 
 export default function BudgetAllocation({ budget }) {
   const hasBudget =

@@ -413,3 +413,375 @@ textarea:focus-visible {
     animation-duration: 0.01ms !important;
   }
 }
+
+
+
+/* ---------- EconoCausal UI polish ---------- */
+
+:root {
+  --teal-glow: rgba(18, 203, 184, 0.14);
+  --shadow-card: 0 8px 28px rgba(25, 44, 75, 0.055);
+  --shadow-hover: 0 14px 34px rgba(25, 44, 75, 0.10);
+}
+
+/* Smoother page appearance */
+html {
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background: rgba(18, 203, 184, 0.24);
+  color: #0b1426;
+}
+
+.main-content {
+  width: calc(100% - 252px);
+  min-width: 0;
+}
+
+.page {
+  animation: page-enter 350ms ease both;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Refined navigation */
+.sidebar h2 {
+  line-height: 1.25;
+}
+
+.nav-item {
+  transition:
+    background 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.nav-item:hover {
+  transform: translateX(3px);
+}
+
+.nav-item.active {
+  box-shadow: inset 0 0 18px var(--teal-glow);
+}
+
+/* Cleaner header */
+.topbar {
+  position: relative;
+}
+
+.topbar h1 {
+  line-height: 1.2;
+}
+
+.status {
+  white-space: nowrap;
+  box-shadow: 0 3px 12px rgba(18, 203, 184, 0.07);
+}
+
+/* Premium card interactions */
+.panel,
+.welcome,
+.stat-card {
+  transition:
+    box-shadow 200ms ease,
+    border-color 200ms ease,
+    transform 200ms ease;
+}
+
+.panel {
+  box-shadow: var(--shadow-card);
+}
+
+.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-hover);
+  border-color: #cbd8e7;
+}
+
+.welcome {
+  border-color: #dceeea;
+}
+
+/* Form controls */
+.panel input[type='file'],
+.panel input[type='number'],
+.panel input[type='text'],
+.panel select,
+.panel textarea {
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.panel input:focus,
+.panel select:focus,
+.panel textarea:focus {
+  outline: none;
+  border-color: var(--teal-dark);
+  box-shadow: 0 0 0 4px var(--teal-glow);
+}
+
+/* Buttons */
+.panel button,
+.main-content button[type='submit'] {
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
+}
+
+.panel button:hover:not(:disabled),
+.main-content button[type='submit']:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 14px rgba(25, 44, 75, 0.10);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Tables */
+.panel table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.panel th {
+  text-align: left;
+  white-space: nowrap;
+}
+
+.panel th:first-child {
+  border-top-left-radius: 8px;
+}
+
+.panel th:last-child {
+  border-top-right-radius: 8px;
+}
+
+.panel tbody tr {
+  transition: background 150ms ease;
+}
+
+.panel tbody tr:hover {
+  background: #f5fbfa;
+}
+
+.panel td {
+  overflow-wrap: anywhere;
+}
+
+/* Chart containers and empty states */
+.chart-placeholder {
+  transition:
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.chart-placeholder:hover {
+  border-color: var(--teal-dark);
+  background: #f2fbf9;
+}
+
+/* Tablet and mobile refinement */
+@media (max-width: 1000px) {
+  .main-content {
+    width: calc(100% - 215px);
+  }
+}
+
+@media (max-width: 650px) {
+  .main-content {
+    width: 100%;
+  }
+
+  .nav-item:hover {
+    transform: none;
+  }
+
+  .topbar {
+    margin-bottom: 22px;
+    padding-bottom: 18px;
+  }
+
+  .status {
+    font-size: 11px;
+  }
+
+  .panel,
+  .welcome,
+  .stat-card {
+    border-radius: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .page {
+    animation: none;
+  }
+
+  .panel,
+  .welcome,
+  .stat-card,
+  .nav-item,
+  button {
+    transition: none !important;
+  }
+}
+
+
+/* EconoCausal brand identity */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 38px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border: 1px solid rgba(18, 203, 184, 0.42);
+  border-radius: 14px;
+  background: linear-gradient(135deg, #12cbb8, #087f78);
+  box-shadow: 0 5px 18px rgba(18, 203, 184, 0.2);
+}
+
+.brand-mark span {
+  color: #ffffff;
+  font-family: 'Manrope', sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+
+.brand-copy h2 {
+  font-size: 20px;
+  letter-spacing: -0.7px;
+}
+
+.brand-copy .subtitle {
+  margin: 4px 0 0;
+  font-size: 9px;
+  letter-spacing: 1px;
+}
+
+@media (max-width: 650px) {
+  .brand {
+    margin-bottom: 18px;
+  }
+}
+
+
+/* EconoCausal themed action buttons */
+.primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 11px 20px;
+  border: 1px solid #12cbb8;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #12cbb8, #087f78);
+  color: #ffffff;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.1px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(18, 203, 184, 0.16);
+  transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.primary-button:hover {
+  background: linear-gradient(135deg, #16bfae, #066c66);
+  box-shadow: 0 7px 18px rgba(18, 203, 184, 0.25);
+  transform: translateY(-1px);
+}
+
+.primary-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(18, 203, 184, 0.15);
+}
+
+.primary-button:focus-visible {
+  outline: 3px solid rgba(18, 203, 184, 0.35);
+  outline-offset: 3px;
+}
+
+.primary-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primary-button {
+    transition: none;
+  }
+}
+
+
+
+/* The file input and its Choose File button */
+input[type="file"] {
+  width: 100%;
+  padding: 10px;
+  border: 1px dashed #b8c9d9;
+  border-radius: 12px;
+  background: #f8fbfd;
+  color: #172337;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+}
+
+input[type="file"]::file-selector-button {
+  margin-right: 14px;
+  padding: 9px 15px;
+  border: 0;
+  border-radius: 8px;
+  background: #0b1426;
+  color: #ffffff;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+input[type="file"]::file-selector-button:hover {
+  background: #087f78;
+}
+
+
+/* Add spacing above the Save Budget button */
+form .primary-button {
+  margin-top: 12px;
+}

@@ -22,7 +22,17 @@ export default function App () {
   return (
     <div className='app'>
       <aside className='sidebar'>
-        <h2>EconoCausal</h2>
+        
+<div className="brand">
+  <div className="brand-mark" aria-hidden="true">
+    <span>EC</span>
+  </div>
+  <div className="brand-copy">
+    <h2>EconoCausal</h2>
+    <p className="subtitle">Pricing Intelligence</p>
+  </div>
+</div>
+
         <p className='subtitle'>Pricing Intelligence</p>
 
         {menuItems.map(item => (
