@@ -6,6 +6,7 @@ from econml.dml import LinearDML
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from effect_summary import summarize_effects
+from sklearn.metrics import mean_squared_error, r2_score
 
 
 def main():
@@ -55,10 +56,46 @@ def main():
 
     model.fit(Y_train, T_train, X=X_train)
 
+    outcome_model = RandomForestRegressor(
+    n_estimators=100,
+    min_samples_leaf=10,
+    random_state=42,
+    )
+    prediction_X = pd.concat([X, T.rename("discount")], axis=1)
+
+    prediction_X_train, prediction_X_test, prediction_Y_train, prediction_Y_test = train_test_split(
+        prediction_X, Y, test_size=0.25, random_state=42
+    )
+
+    outcome_model = RandomForestRegressor(
+        n_estimators=100,
+        min_samples_leaf=10,
+        random_state=42,
+    )
+    outcome_model.fit(prediction_X_train, prediction_Y_train)
+
+    predicted_purchase = outcome_model.predict(prediction_X_test)
+    rmse = mean_squared_error(prediction_Y_test, predicted_purchase) ** 0.5
+    r2 = r2_score(prediction_Y_test, predicted_purchase)
+
+    print("\n=== Outcome Prediction Evaluation ===")
+    print(f"RMSE: {rmse:.4f}")
+    print(f"R²:   {r2:.4f}")
+
     # Estimated change in purchase probability for a 10 percentage-point
     # increase in discount, at the observed feature values.
+
     effects = model.effect(X_test, T0=T_test, T1=T_test + 0.10)
     summarize_effects(effects)
+
+    results = pd.DataFrame({
+    "discount": T_test.to_numpy(),
+    "estimated_effect": effects,
+    })
+
+    output_path = project_root / "data" / "treatment_effects.csv"
+    results.to_csv(output_path, index=False)
+    print(f"Individual treatment effects saved to: {output_path}")
 
     print(f"Rows used: {len(df)}")
     print(f"Test rows: {len(X_test)}")
