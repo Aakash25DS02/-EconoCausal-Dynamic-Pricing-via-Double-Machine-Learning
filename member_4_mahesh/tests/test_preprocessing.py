@@ -29,3 +29,34 @@ def sample_data():
         "revenue": [100, 200, 120, 80],
         "profit": [20, 40, 25, 15],
     })
+
+
+def test_preprocessing_preserves_rows(sample_data):
+    processed = preprocess_data(sample_data)
+    assert len(processed) == len(sample_data)
+
+
+def test_model_data_shapes(sample_data):
+    X, T, Y = get_model_data(sample_data)
+
+    assert list(X.columns) == MODEL_FEATURES
+    assert X.shape == (4, len(MODEL_FEATURES))
+    assert len(T) == 4
+    assert len(Y) == 4
+
+
+def test_no_treatment_or_outcome_leakage(sample_data):
+    X, _, _ = get_model_data(sample_data)
+
+    assert "treatment" not in X.columns
+    assert "discount_amount" not in X.columns
+    assert "churned" not in X.columns
+    assert "purchased_again" not in X.columns
+    assert "profit" not in X.columns
+
+
+def test_invalid_rate_fails(sample_data):
+    sample_data.loc[0, "price_sensitivity"] = 1.5
+
+    with pytest.raises(ValueError, match="price_sensitivity"):
+        preprocess_data(sample_data)
