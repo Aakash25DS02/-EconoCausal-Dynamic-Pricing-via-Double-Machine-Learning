@@ -154,3 +154,29 @@ These figures are model-based estimates using synthetic data, not guaranteed rea
 
 EconoCausal demonstrates an end-to-end prototype combining discount analysis, a DML-style estimation module, scenario comparison, a FastAPI backend, API documentation, and automated testing. Further validation is needed before applying its recommendations to real business decisions.
 
+## 11. System Architecture
+
+### Data Layer
+The project uses `data/pricing_data.csv`, a synthetic dataset containing 2,000 records and seven columns related to pricing, discounts, promotions, seasons, and purchase outcomes.
+
+### Analysis Layer
+- `dml_model.py`: Implements a DML-style estimator to estimate the relationship between discount and purchase outcomes while accounting for observed control variables.
+- `discount_optimizer.py`: Compares discount scenarios using predicted purchase probability and estimated revenue per record.
+- `generate_data.py`: Generates the synthetic pricing dataset.
+
+### API Layer
+`app/main.py` provides a FastAPI application with endpoints for API health, dataset summary, data preview, and discount recommendation.
+
+### Testing Layer
+- `test_dml_model.py`: Tests the DML-style estimator.
+- `test_api.py`: Tests the API endpoints and expected responses.
+
+### Overall Flow
+1. Generate or load the synthetic pricing data.
+2. Analyze the dataset and estimate the discount–purchase relationship.
+3. Compare discount scenarios using the optimizer.
+4. Access supported analysis results through the FastAPI endpoints.
+5. Validate the application using automated tests.
+
+**Important distinction:** The DML-style estimator and the predictive discount optimizer serve different purposes. The optimizer's recommended discount is a model-based scenario result, not a proven causal optimum.
+
