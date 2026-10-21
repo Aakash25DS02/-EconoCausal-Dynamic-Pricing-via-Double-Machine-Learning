@@ -10,6 +10,7 @@ export default function App () {
   const [activePage, setActivePage] = useState('Dashboard')
   const [budget, setBudget] = useState(null)
   const [dataset, setDataset] = useState(null)
+  console.log('App dataset:', dataset)
 
   const menuItems = [
     'Dashboard',

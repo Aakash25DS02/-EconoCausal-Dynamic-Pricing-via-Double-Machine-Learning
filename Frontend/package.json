@@ -12,11 +12,15 @@
     "@vitejs/plugin-react": "latest",
     "lucide-react": "^1.59.0",
     "papaparse": "^5.7.0",
-    "plotly.js": "latest",
+    "plotly.js": "^4.1.2",
     "react": "latest",
     "react-dom": "latest",
-    "react-plotly.js": "latest",
+    "react-plotly.js": "^4.1.0",
     "recharts": "^3.10.1",
     "vite": "latest"
+  },
+  "devDependencies": {
+    "@types/plotly.js": "^3.0.15",
+    "@types/react-plotly.js": "^2.6.4"
   }
 }

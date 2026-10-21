@@ -785,3 +785,22 @@ input[type="file"]::file-selector-button:hover {
 form .primary-button {
   margin-top: 12px;
 }
+
+
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.results-table th,
+.results-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.results-table th {
+  background-color: #f8fafc;
+  font-weight: 600;
+}
