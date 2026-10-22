@@ -55,10 +55,19 @@ export default function TreatmentEffects ({ dataset }) {
     dataset?.treatmentEffects ??
     dataset?.customerEffects ??
     dataset?.treatment_effects ??
+    dataset?.customer_results ??
     []
 
   const hasCustomerResults =
     Array.isArray(customerResults) && customerResults.length > 0
+
+  // Show uploaded customer records when model predictions are not available.
+  // These are observed records, NOT treatment-effect predictions.
+  const displayCustomers = hasCustomerResults
+    ? customerResults
+    : Array.isArray(dataset?.rows)
+    ? dataset.rows
+    : []
 
   const getField = (row, names) => {
     const key = Object.keys(row || {}).find(key =>
@@ -107,10 +116,8 @@ export default function TreatmentEffects ({ dataset }) {
     height: '100%'
   }
 
-  console.log('Dataset received:', dataset)
-  console.log('Customer results:', customerResults)
-  console.log('CSV columns:', dataset?.columns)
-  console.log('First CSV row:', dataset?.rows?.[0])
+
+
   return (
     <div className='page'>
       <h1>Treatment Effects</h1>
@@ -292,7 +299,7 @@ export default function TreatmentEffects ({ dataset }) {
         <h2>Customer-Level Treatment Effects</h2>
         <p>Individual treatment-effect predictions returned by the model.</p>
 
-        {hasCustomerResults ? (
+        {displayCustomers.length > 0 ? (
           <div style={{ overflowX: 'auto' }}>
             <table className='results-table'>
               <thead>
@@ -305,7 +312,7 @@ export default function TreatmentEffects ({ dataset }) {
               </thead>
 
               <tbody>
-                {customerResults.map((customer, index) => (
+                {displayCustomers.map((customer, index) => (
                   <tr key={index}>
                     <td>
                       {getField(customer, [
@@ -315,13 +322,15 @@ export default function TreatmentEffects ({ dataset }) {
                       ]) ?? `Row ${index + 1}`}
                     </td>
                     <td>
-                      {displayValue(
-                        getField(customer, [
-                          'treatment_effect',
-                          'treatmenteffect',
-                          'uplift'
-                        ])
-                      )}
+                      {hasCustomerResults
+                        ? displayValue(
+                            getField(customer, [
+                              'treatment_effect',
+                              'treatmenteffect',
+                              'uplift'
+                            ])
+                          )
+                        : 'Not calculated'}
                     </td>
                     <td>
                       {displayValue(
