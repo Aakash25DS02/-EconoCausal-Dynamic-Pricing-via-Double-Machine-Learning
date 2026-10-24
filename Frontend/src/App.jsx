@@ -10,6 +10,8 @@ export default function App () {
   const [activePage, setActivePage] = useState('Dashboard')
   const [budget, setBudget] = useState(null)
   const [dataset, setDataset] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
   console.log('App dataset:', dataset)
 
   const menuItems = [
@@ -23,16 +25,15 @@ export default function App () {
   return (
     <div className='app'>
       <aside className='sidebar'>
-        
-<div className="brand">
-  <div className="brand-mark" aria-hidden="true">
-    <span>EC</span>
-  </div>
-  <div className="brand-copy">
-    <h2>EconoCausal</h2>
-    <p className="subtitle">Pricing Intelligence</p>
-  </div>
-</div>
+        <div className='brand'>
+          <div className='brand-mark' aria-hidden='true'>
+            <span>EC</span>
+          </div>
+          <div className='brand-copy'>
+            <h2>EconoCausal</h2>
+            <p className='subtitle'>Pricing Intelligence</p>
+          </div>
+        </div>
 
         <p className='subtitle'>Pricing Intelligence</p>
 
@@ -73,7 +74,7 @@ export default function App () {
         )}
 
         {activePage === 'Treatment Effects' && (
-          <TreatmentEffects dataset={dataset} />
+          <TreatmentEffects dataset={dataset} loading={loading} error={ error} />
         )}
       </main>
     </div>

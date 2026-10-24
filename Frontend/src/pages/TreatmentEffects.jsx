@@ -1,6 +1,10 @@
 import Plot from 'react-plotly.js'
 
-export default function TreatmentEffects ({ dataset }) {
+export default function TreatmentEffects ({
+  dataset,
+  loading = false,
+  error = null
+}) {
   // Find CSV columns without depending on capitalization.
   const getValue = (row, columnName) => {
     const key = Object.keys(row || {}).find(
@@ -116,10 +120,16 @@ export default function TreatmentEffects ({ dataset }) {
     height: '100%'
   }
 
-
-
   return (
     <div className='page'>
+      {loading && <p role='status'>Loading treatment-effect data...</p>}
+
+      {error && (
+        <p role='alert'>
+          Unable to load treatment-effect data:{' '}
+          {typeof error === 'string' ? error : 'Please try again.'}
+        </p>
+      )}
       <h1>Treatment Effects</h1>
       <p>
         Explore observed pricing and sales data, model evaluation previews, and

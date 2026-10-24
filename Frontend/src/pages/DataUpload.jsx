@@ -71,9 +71,30 @@ export default function DataUpload ({ dataset, onDatasetLoaded }) {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: header => header.trim(),
+      transformHeader: (() => {
+        const seen = new Set()
+        let duplicateFound = false
+
+        const transform = header => {
+          const cleaned = header.trim()
+
+          if (seen.has(cleaned.toLowerCase())) {
+            duplicateFound = true
+          }
+
+          seen.add(cleaned.toLowerCase())
+          return cleaned
+        }
+
+        transform.hasDuplicates = () => duplicateFound
+        return transform
+      })(),
 
       complete: result => {
+        if (result.meta.renamedHeaders) {
+          setError('Duplicate column names were found. Please rename them.')
+          return
+        }
         const data = result.data
         const headers = result.meta.fields || []
 
@@ -162,7 +183,7 @@ export default function DataUpload ({ dataset, onDatasetLoaded }) {
       <h2>Upload Pricing Dataset</h2>
       <p>Upload your CSV to inspect its structure and data quality.</p>
 
-      <input type='file' accept='.csv,text/csv' onChange={handleFileChange} />
+      <input type='file' onChange={handleFileChange} />
 
       {error && (
         <p role='alert' style={{ color: '#c62828' }}>
