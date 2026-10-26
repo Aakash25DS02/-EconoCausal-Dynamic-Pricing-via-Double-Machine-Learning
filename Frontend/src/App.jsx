@@ -1,10 +1,11 @@
-﻿import { useState } from 'react'
+﻿import { useState, lazy, Suspense } from 'react'
 import DataUpload from './pages/DataUpload.jsx'
 import BudgetSettings from './pages/BudgetSettings.jsx'
 import BudgetAllocation from './pages/BudgetAllocation.jsx'
 import Dashboard from './pages/Dashboard.jsx'
-import TreatmentEffects from './pages/TreatmentEffects.jsx'
 import './index.css'
+
+const TreatmentEffects = lazy(() => import('./pages/TreatmentEffects.jsx'))
 
 export default function App () {
   const [activePage, setActivePage] = useState('Dashboard')
@@ -74,7 +75,15 @@ export default function App () {
         )}
 
         {activePage === 'Treatment Effects' && (
-          <TreatmentEffects dataset={dataset} loading={loading} error={ error} />
+          <Suspense
+            fallback={<p role='status'>Loading Treatment Effects page...</p>}
+          >
+            <TreatmentEffects
+              dataset={dataset}
+              loading={loading}
+              error={error}
+            />
+          </Suspense>
         )}
       </main>
     </div>
