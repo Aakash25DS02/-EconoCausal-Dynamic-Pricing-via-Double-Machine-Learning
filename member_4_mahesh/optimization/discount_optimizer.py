@@ -1,0 +1,49 @@
+
+import numpy as np
+import pandas as pd
+from scipy.optimize import Bounds, milp
+
+from .objective import build_objective
+from .constraints import build_constraints
+
+
+def optimize_discounts(
+    offers: pd.DataFrame,
+    budget: float,
+) -> dict:
+    """Select offers to maximize total incremental profit."""
+    required = {
+        "customer_id",
+        "discount_amount",
+        "incremental_profit",
+    }
+    missing = required - set(offers.columns)
+
+    if missing:
+        raise ValueError(f"Missing columns: {sorted(missing)}")
+
+    if "eligible" in offers.columns:
+        eligible = offers["eligible"].fillna(False).astype(bool)
+        offers = offers.loc[eligible].copy()
+    else:
+        offers = offers.copy()
+
+    if offers.empty:
+        return {
+            "selected_offers": offers.copy(),
+            "total_discount_spend": 0.0,
+            "total_incremental_profit": 0.0,
+            "budget": float(budget),
+            "remaining_budget": float(budget),
+            "status": "no_eligible_offers",
+        }
+
+    costs = pd.to_numeric(
+        offers["discount_amount"], errors="raise"
+    ).to_numpy(dtype=float)
+
+    if not np.isfinite(costs).all() or (costs < 0).any():
+        raise ValueError("Discount costs must be finite and nonnegative.")
+
+    if not np.isfinite(budget) or budget < 0:
+        raise ValueError("Budget must be finite and nonnegative.")
