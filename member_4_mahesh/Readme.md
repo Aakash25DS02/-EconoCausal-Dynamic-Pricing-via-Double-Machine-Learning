@@ -19,3 +19,5 @@ optimizes discount offers subject to a marketing budget.
   numeric values, customer IDs, treatment labels, and outcomes.
 - `data_processing/preprocessing.py`: Prepares features, treatment,
   and outcome variables for causal ML.
+### Optimization
+- `optimization/objective.py`: Creates the profit-maximization objective.

@@ -47,3 +47,40 @@ def optimize_discounts(
 
     if not np.isfinite(budget) or budget < 0:
         raise ValueError("Budget must be finite and nonnegative.")
+
+    objective = build_objective(offers)
+    constraints = build_constraints(offers, budget)
+
+    result = milp(
+        c=objective,
+        integrality=np.ones(len(offers)),
+        bounds=Bounds(
+            np.zeros(len(offers)),
+            np.ones(len(offers)),
+        ),
+        constraints=constraints,
+        options={"disp": False},
+    )
+
+    if result.status != 0 or result.x is None:
+        raise RuntimeError(
+            f"Optimization did not reach an optimal solution: {result.message}"
+        )
+
+    selected_mask = result.x > 0.5
+    selected = offers.iloc[np.flatnonzero(selected_mask)].copy()
+
+    total_spend = float(selected["discount_amount"].sum())
+    total_profit = float(selected["incremental_profit"].sum())
+
+    if total_spend > budget + 1e-6:
+        raise RuntimeError("Optimizer returned a solution exceeding budget.")
+
+    return {
+        "selected_offers": selected,
+        "total_discount_spend": total_spend,
+        "total_incremental_profit": total_profit,
+        "budget": float(budget),
+        "remaining_budget": float(budget - total_spend),
+        "status": "optimal",
+    }
