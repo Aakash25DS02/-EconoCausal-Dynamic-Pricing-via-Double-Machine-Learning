@@ -2,72 +2,62 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize
 
 
-def main():
+def test_optimized_discounts():
     root = Path(__file__).resolve().parents[2]
     input_path = root / "data" / "treatment_effects.csv"
     output_path = root / "data" / "optimized_discounts.csv"
 
-    df = pd.read_csv(input_path)
-    required = {"discount", "estimated_effect"}
-    missing = required - set(df.columns)
-    if missing:
-        raise ValueError(f"Missing required columns: {sorted(missing)}")
+    source = pd.read_csv(input_path)
+    result = pd.read_csv(output_path)
 
-    df = df.dropna(subset=["discount", "estimated_effect"]).copy()
-    df = df[
-        np.isfinite(df["discount"]) & np.isfinite(df["estimated_effect"])
-    ].reset_index(drop=True)
+    # Check output row count
+    assert len(result) == len(source), "Row count changed"
 
-    if df.empty:
-        raise ValueError("No valid treatment-effect rows found.")
+    # Check required columns
+    required = {
+        "discount",
+        "estimated_effect",
+        "optimized_discount",
+        "discount_change",
+    }
+    missing = required - set(result.columns)
+    assert not missing, f"Missing columns: {sorted(missing)}"
 
-    effects = df["estimated_effect"].to_numpy(dtype=float)
-    initial = df["discount"].to_numpy(dtype=float)
-
-    # Assumption: total allocated discount fractions cannot exceed
-    # the sum of the historical discount fractions.
-    budget = float(initial.sum())
-    max_discount = 0.35
-
-    # The effect estimates are for a +0.10 discount change.
-    # This is a simplified allocation proxy, not a profit/revenue model.
-    objective = lambda discounts: -float(
-        np.dot(discounts / 0.10, effects)
+    # Check for missing and non-finite values
+    numeric_cols = ["discount", "estimated_effect", "optimized_discount"]
+    assert result[numeric_cols].notna().all().all(), (
+        "Missing values found in optimization results"
+    )
+    assert np.isfinite(result[numeric_cols].to_numpy(dtype=float)).all(), (
+        "Non-finite values found in optimization results"
     )
 
-    result = minimize(
-        objective,
-        x0=np.clip(initial, 0.0, max_discount),
-        method="SLSQP",
-        bounds=[(0.0, max_discount)] * len(df),
-        constraints=[{
-            "type": "ineq",
-            "fun": lambda discounts: budget - float(discounts.sum()),
-        }],
-        options={"maxiter": 1000, "ftol": 1e-9},
+    # Check discount bounds: 0% to 35%
+    assert result["optimized_discount"].between(0.0, 0.35).all(), (
+        "Optimized discount outside 0–35% bounds"
     )
 
-    if not result.success:
-        raise RuntimeError(f"Optimization failed: {result.message}")
+    # Check total discount budget constraint
+    budget = source["discount"].sum()
+    allocated = result["optimized_discount"].sum()
+    assert allocated <= budget + 1e-5, "Budget constraint exceeded"
 
-    df["optimized_discount"] = result.x
-    df["discount_change"] = df["optimized_discount"] - df["discount"]
+    # Check negative-effect rows receive zero optimized discount
+    negative_effect_rows = result[result["estimated_effect"] < 0]
+    assert (
+        negative_effect_rows["optimized_discount"] <= 1e-8
+    ).all(), "Negative-effect rows should receive zero optimized discount"
 
-    df.to_csv(output_path, index=False)
+    # Check discount change calculation
+    expected_change = result["optimized_discount"] - result["discount"]
+    assert np.allclose(
+        result["discount_change"], expected_change, atol=1e-8
+    ), "Discount changes are incorrect"
 
-    print("Discount allocation optimization completed.")
-    print(f"Rows optimized: {len(df)}")
-    print(f"Discount budget (fraction-sum proxy): {budget:.4f}")
-    print(f"Budget used: {result.x.sum():.4f}")
-    print(f"Budget remaining: {budget - result.x.sum():.6f}")
-    print(f"Rows receiving a discount: {(result.x > 0).sum()}")
-    print(f"Rows at the 35% cap: {np.isclose(result.x, max_discount).sum()}")
-    print("Note: this is a simplified effect-based proxy, not profit maximization.")
-    print(f"Saved results to: {output_path}")
+    print("All optimizer validation checks passed.")
 
 
 if __name__ == "__main__":
-    main()
+    test_optimized_discounts()
