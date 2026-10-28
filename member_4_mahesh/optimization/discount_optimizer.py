@@ -84,3 +84,20 @@ def optimize_discounts(
         "remaining_budget": float(budget - total_spend),
         "status": "optimal",
     }
+
+    
+if __name__ == "__main__":
+    sample_offers = pd.DataFrame({
+        "customer_id": ["C001", "C002", "C003"],
+        "discount_amount": [100, 200, 100],
+        "incremental_profit": [80, 150, 60],
+        "eligible": [True, True, True],
+    })
+
+    result = optimize_discounts(sample_offers, budget=200)
+
+    print("Selected offers:")
+    print(result["selected_offers"])
+    print("Spend:", result["total_discount_spend"])
+    print("Incremental profit:", result["total_incremental_profit"])
+    print("Status:", result["status"])
