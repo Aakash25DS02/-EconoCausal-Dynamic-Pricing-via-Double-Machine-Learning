@@ -11,44 +11,78 @@ export default function DataUpload ({ dataset, onDatasetLoaded }) {
   const [error, setError] = useState('')
   const [rowCount, setRowCount] = useState(0)
 
-  useEffect(() => {
-    if (!dataset) return
+  
+useEffect(() => {
+  if (!dataset) return
 
-    setFileName(dataset.fileName || '')
-    setColumns(dataset.columns || [])
-    setRows((dataset.rows || []).slice(0, 5))
-    setRowCount(dataset.rowCount || 0)
+  // Support both uploaded CSV data and backend API data.
+  const dataRows = Array.isArray(dataset.rows)
+    ? dataset.rows
+    : Array.isArray(dataset.records)
+      ? dataset.records
+      : []
 
-    const missing = {}
-    const stats = {}
+  const dataColumns = Array.isArray(dataset.columns)
+    ? dataset.columns
+    : []
 
-    ;(dataset.columns || []).forEach(column => {
-      const values = (dataset.rows || []).map(row =>
-        String(row[column] ?? '').trim()
+  setFileName(
+    dataset.fileName ||
+    (dataset.dataset_path
+      ? dataset.dataset_path.split(/[\\/]/).pop()
+      : 'pricing_data.csv')
+  )
+
+  setColumns(dataColumns)
+  setRows(dataRows.slice(0, 5))
+  setRowCount(
+    dataset.rowCount ??
+    (typeof dataset.rows === 'number'
+      ? dataset.rows
+      : dataRows.length)
+  )
+
+  const missing = {}
+  const stats = {}
+
+  dataColumns.forEach(column => {
+    const values = dataRows.map(row =>
+      String(row[column] ?? '').trim()
+    )
+
+    missing[column] = values.filter(
+      value => value === ''
+    ).length
+
+    const numericValues = values
+      .filter(value => value !== '')
+      .map(Number)
+
+    const allNumeric =
+      numericValues.length > 0 &&
+      values.every(
+        value =>
+          value === '' ||
+          Number.isFinite(Number(value))
       )
 
-      missing[column] = values.filter(value => value === '').length
-
-      const numericValues = values.filter(value => value !== '').map(Number)
-
-      const allNumeric =
-        numericValues.length > 0 &&
-        values.every(value => value === '' || Number.isFinite(Number(value)))
-
-      if (allNumeric) {
-        stats[column] = {
-          min: Math.min(...numericValues),
-          max: Math.max(...numericValues),
-          average:
-            numericValues.reduce((total, value) => total + value, 0) /
-            numericValues.length
-        }
+    if (allNumeric) {
+      stats[column] = {
+        min: Math.min(...numericValues),
+        max: Math.max(...numericValues),
+        average:
+          numericValues.reduce(
+            (total, value) => total + value,
+            0
+          ) / numericValues.length
       }
-    })
+    }
+  })
 
-    setMissingValues(missing)
-    setStatistics(stats)
-  }, [dataset])
+  setMissingValues(missing)
+  setStatistics(stats)
+}, [dataset])
+
 
   function handleFileChange (event) {
     const file = event.target.files[0]

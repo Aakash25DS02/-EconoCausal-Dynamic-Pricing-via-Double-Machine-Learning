@@ -1,113 +1,86 @@
-import Plot from 'react-plotly.js'
 
-export default function TreatmentEffects ({
+import { useEffect, useState } from 'react'
+import Plot from 'react-plotly.js'
+import { getPromotionEffect } from '../services/api'
+
+export default function TreatmentEffects({
   dataset,
   loading = false,
   error = null
 }) {
-  // Find CSV columns without depending on capitalization.
-  const getValue = (row, columnName) => {
+  const [analysis, setAnalysis] = useState(null)
+  const [analysisLoading, setAnalysisLoading] = useState(true)
+  const [analysisError, setAnalysisError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadAnalysis() {
+      setAnalysisLoading(true)
+      setAnalysisError('')
+
+      try {
+        const result = await getPromotionEffect()
+        if (!cancelled) setAnalysis(result)
+      } catch (err) {
+        if (!cancelled) {
+          setAnalysisError(err.message || 'Unable to load analysis.')
+        }
+      } finally {
+        if (!cancelled) setAnalysisLoading(false)
+      }
+    }
+
+    loadAnalysis()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const rows = Array.isArray(dataset?.rows)
+    ? dataset.rows
+    : Array.isArray(dataset?.records)
+      ? dataset.records
+      : []
+
+  const getValue = (row, name) => {
     const key = Object.keys(row || {}).find(
-      key => key.toLowerCase() === columnName.toLowerCase()
+      key => key.toLowerCase() === name.toLowerCase()
     )
     return key ? row[key] : undefined
   }
-
-  const rows = Array.isArray(dataset?.rows) ? dataset.rows : []
 
   const chartData = rows
     .map(row => ({
       price: Number(getValue(row, 'price')),
-      sales: Number(getValue(row, 'sales'))
+      purchase: Number(getValue(row, 'purchase'))
     }))
-    .filter(row => Number.isFinite(row.price) && Number.isFinite(row.sales))
+    .filter(row =>
+      Number.isFinite(row.price) &&
+      Number.isFinite(row.purchase)
+    )
     .sort((a, b) => a.price - b.price)
 
-  const count = chartData.length
-
-  const averagePrice = count
-    ? chartData.reduce((sum, row) => sum + row.price, 0) / count
+  const previewPurchaseRate = chartData.length
+    ? chartData.reduce((sum, row) => sum + row.purchase, 0) /
+      chartData.length
     : null
 
-  const averageSales = count
-    ? chartData.reduce((sum, row) => sum + row.sales, 0) / count
-    : null
+  const formatPercent = value =>
+    Number.isFinite(value) ? `${(value * 100).toFixed(2)}%` : '—'
 
-  // Illustrative preview only — not a causal uplift calculation.
-  const sales = chartData.map(row => row.sales)
-  const minSales = count ? Math.min(...sales) : 0
-  const salesRange = count ? Math.max(...sales) - minSales || 1 : 1
-
-  const upliftPreview =
-    count > 1
-      ? chartData.map((row, index) => ({
-          population: ((index + 1) / count) * 100,
-          uplift: ((row.sales - minSales) / salesRange) * 100
-        }))
-      : []
-
-  // Illustrative score only — not a genuine Qini curve.
-  const qiniPreview = upliftPreview.map(point => ({
-    population: point.population,
-    model: (point.uplift * point.population) / 100,
-    baseline: point.population * 0.5
-  }))
-
-  // Accept customer results when provided by the backend.
-
-  const customerResults =
-    dataset?.treatmentEffects ??
-    dataset?.customerEffects ??
-    dataset?.treatment_effects ??
-    dataset?.customer_results ??
-    []
-
-  const hasCustomerResults =
-    Array.isArray(customerResults) && customerResults.length > 0
-
-  // Show uploaded customer records when model predictions are not available.
-  // These are observed records, NOT treatment-effect predictions.
-  const displayCustomers = hasCustomerResults
-    ? customerResults
-    : Array.isArray(dataset?.rows)
-    ? dataset.rows
-    : []
-
-  const getField = (row, names) => {
-    const key = Object.keys(row || {}).find(key =>
-      names.includes(key.toLowerCase())
-    )
-    return key ? row[key] : undefined
-  }
-
-  const displayValue = value => {
-    if (value === null || value === undefined || value === '') {
-      return '—'
-    }
-
-    const number = Number(value)
-    return Number.isFinite(number) ? number.toFixed(2) : String(value)
-  }
+  const formatNumber = value =>
+    Number.isFinite(value) ? value.toFixed(2) : '—'
 
   const baseLayout = {
     autosize: true,
-    margin: { l: 65, r: 25, t: 55, b: 80 },
+    margin: { l: 65, r: 25, t: 55, b: 65 },
     paper_bgcolor: 'rgba(0,0,0,0)',
     plot_bgcolor: 'rgba(0,0,0,0)',
     font: { family: 'Arial, sans-serif', size: 12 },
-    hovermode: 'closest',
-    xaxis: {
-      gridcolor: '#e5e7eb',
-      zeroline: false
-    },
-    yaxis: {
-      gridcolor: '#e5e7eb',
-      zeroline: false
-    },
-    legend: {
-      orientation: 'h',
-      y: -0.25
-    }
+    xaxis: { gridcolor: '#e5e7eb', zeroline: false },
+    yaxis: { gridcolor: '#e5e7eb', zeroline: false }
   }
 
   const plotConfig = {
@@ -120,115 +93,132 @@ export default function TreatmentEffects ({
     height: '100%'
   }
 
-  return (
-    <div className='page'>
-      {loading && <p role='status'>Loading treatment-effect data...</p>}
+  const interval = analysis?.confidence_interval_95
+  const validInterval =
+    Array.isArray(interval) &&
+    interval.length === 2 &&
+    interval.every(Number.isFinite)
 
-      {error && (
-        <p role='alert'>
-          Unable to load treatment-effect data:{' '}
-          {typeof error === 'string' ? error : 'Please try again.'}
-        </p>
-      )}
+  return (
+    <div className="page">
       <h1>Treatment Effects</h1>
       <p>
-        Explore observed pricing and sales data, model evaluation previews, and
-        customer-level treatment-effect predictions.
+        Analysis of promotion and purchase outcomes using the complete
+        synthetic dataset. Estimates are not proof of real-world causation.
       </p>
 
-      {/* Summary cards */}
-      <div className='stats-grid'>
-        <div className='panel'>
-          <p>Valid Observations</p>
-          <h2>{count}</h2>
+      {(loading || analysisLoading) && (
+        <p role="status">Loading analysis...</p>
+      )}
+
+      {(error || analysisError) && (
+        <p role="alert">
+          {typeof error === 'string' ? error : ''}
+          {analysisError}
+        </p>
+      )}
+
+      <div className="stats-grid">
+        <div className="panel">
+          <p>Analysis Observations</p>
+          <h2>{analysis?.observations ?? '—'}</h2>
         </div>
 
-        <div className='panel'>
-          <p>Average Price</p>
-          <h2>{averagePrice === null ? '—' : averagePrice.toFixed(2)}</h2>
+        <div className="panel">
+          <p>Adjusted Promotion Effect</p>
+          <h2>
+            {analysis
+              ? `${analysis.adjusted_effect_percentage_points > 0 ? '+' : ''}${analysis.adjusted_effect_percentage_points.toFixed(2)} pp`
+              : '—'}
+          </h2>
         </div>
 
-        <div className='panel'>
-          <p>Average Sales</p>
-          <h2>{averageSales === null ? '—' : averageSales.toFixed(2)}</h2>
+        <div className="panel">
+          <p>95% Confidence Interval</p>
+          <h2>
+            {validInterval
+              ? `${(interval[0] * 100).toFixed(2)} to ${(interval[1] * 100).toFixed(2)} pp`
+              : '—'}
+          </h2>
         </div>
       </div>
 
-      {/* Price vs Sales */}
-      <section className='panel'>
-        <h2>Price vs Sales</h2>
+      <section className="panel">
+        <h2>Promotion vs Control Purchase Rate</h2>
         <p>
-          Observed relationship between price and sales. This chart does not
-          establish causation.
+          Observed purchase rates for customers with and without promotion.
         </p>
 
-        {count > 0 ? (
+        {analysis && (
+          <Plot
+            data={[
+              {
+                x: ['No Promotion', 'Promotion'],
+                y: [
+                  analysis.control_purchase_rate * 100,
+                  analysis.promotion_purchase_rate * 100
+                ],
+                type: 'bar',
+                marker: { color: ['#64748b', '#2563eb'] },
+                hovertemplate:
+                  '%{x}<br>Purchase rate: %{y:.2f}%<extra></extra>'
+              }
+            ]}
+            layout={{
+              ...baseLayout,
+              title: { text: 'Observed Purchase Rates' },
+              height: 340,
+              yaxis: {
+                ...baseLayout.yaxis,
+                title: { text: 'Purchase Rate (%)' },
+                rangemode: 'tozero'
+              }
+            }}
+            config={plotConfig}
+            useResizeHandler
+            style={chartStyle}
+          />
+        )}
+      </section>
+
+      <section className="panel">
+        <h2>Price vs Purchase</h2>
+        <p>
+          Each point shows an observed record from the dataset preview.
+          Purchase is coded as 0 or 1. This chart is descriptive, not causal.
+        </p>
+
+        {chartData.length > 0 ? (
           <Plot
             data={[
               {
                 x: chartData.map(row => row.price),
-                y: chartData.map(row => row.sales),
+                y: chartData.map(row => row.purchase),
                 type: 'scatter',
-                mode: 'lines+markers',
-                name: 'Observed sales',
-                line: { color: '#2563eb', width: 2 },
-                marker: { size: 7 },
+                mode: 'markers',
+                name: 'Observed purchase',
+                marker: {
+                  color: '#2563eb',
+                  size: 8,
+                  opacity: 0.7
+                },
                 hovertemplate:
-                  'Price: %{x:.2f}<br>Sales: %{y:.2f}<extra></extra>'
+                  'Price: %{x:.2f}<br>Purchase: %{y}<extra></extra>'
               }
             ]}
             layout={{
               ...baseLayout,
-              title: { text: 'Price and Sales Relationship' },
+              title: { text: 'Price and Purchase Outcome' },
               height: 340,
-              xaxis: { ...baseLayout.xaxis, title: { text: 'Price' } },
-              yaxis: { ...baseLayout.yaxis, title: { text: 'Sales' } }
-            }}
-            config={plotConfig}
-            useResizeHandler
-            style={chartStyle}
-          />
-        ) : (
-          <p>Upload a CSV with valid Price and Sales columns.</p>
-        )}
-      </section>
-
-      {/* Uplift Curve */}
-      <section className='panel'>
-        <h2>Uplift Curve</h2>
-        <p>
-          Preview based on normalized observed sales. Actual uplift requires
-          treatment labels, outcomes, and model predictions.
-        </p>
-
-        {upliftPreview.length > 1 ? (
-          <Plot
-            data={[
-              {
-                x: upliftPreview.map(point => point.population),
-                y: upliftPreview.map(point => point.uplift),
-                type: 'scatter',
-                mode: 'lines+markers',
-                name: 'Illustrative preview',
-                line: { color: '#7c3aed', width: 3 },
-                marker: { size: 6 },
-                hovertemplate:
-                  'Customers selected: %{x:.1f}%<br>' +
-                  'Normalized sales: %{y:.2f}%<extra></extra>'
-              }
-            ]}
-            layout={{
-              ...baseLayout,
-              title: { text: 'Uplift Curve — Illustrative Preview' },
-              height: 350,
               xaxis: {
                 ...baseLayout.xaxis,
-                title: { text: 'Customers Selected (%)' },
-                range: [0, 100]
+                title: { text: 'Price' }
               },
               yaxis: {
                 ...baseLayout.yaxis,
-                title: { text: 'Normalized Sales (%)' }
+                title: { text: 'Purchase (0 = No, 1 = Yes)' },
+                tickmode: 'array',
+                tickvals: [0, 1]
               }
             }}
             config={plotConfig}
@@ -236,151 +226,80 @@ export default function TreatmentEffects ({
             style={chartStyle}
           />
         ) : (
+          <p>No purchase preview data is available.</p>
+        )}
+
+        <p>
+          Preview purchase rate: {formatPercent(previewPurchaseRate)}
+        </p>
+      </section>
+
+      <section className="panel">
+        <h2>Adjusted Promotion Analysis</h2>
+
+        {analysis ? (
+          <>
+            <p>
+              Adjusted estimate: {formatNumber(
+                analysis.adjusted_effect_percentage_points
+              )} percentage points.
+            </p>
+            <p>
+              Promotion group: {formatPercent(
+                analysis.promotion_purchase_rate
+              )}
+              {' · '}
+              Control group: {formatPercent(
+                analysis.control_purchase_rate
+              )}
+            </p>
+            <p>
+              Robust standard error: {formatNumber(
+                analysis.robust_standard_error
+              )}
+            </p>
+            <p>
+              Method: adjusted linear probability model with
+              heteroskedasticity-robust standard errors.
+            </p>
+            <p>
+              Covariates: {analysis.covariates?.join(', ')}
+            </p>
+            <p>
+              <strong>Interpretation:</strong> The adjusted estimate
+              describes the promotion-associated difference in purchase
+              probability after accounting for the listed variables.
+              The confidence interval reflects model-based uncertainty,
+              not uncertainty from unmeasured confounding.
+            </p>
+            <p>
+              <strong>Data limitation:</strong>{' '}
+              {analysis.causal_warning}
+            </p>
+          </>
+        ) : (
           <p>
-            At least two valid Price and Sales rows are required for this
-            preview.
+            The adjusted analysis is unavailable until the backend endpoint
+            responds successfully.
           </p>
         )}
       </section>
 
-      {/* Qini Curve */}
-      <section className='panel'>
-        <h2>Qini Curve</h2>
+      <section className="panel">
+        <h2>Uplift and Qini Evaluation</h2>
         <p>
-          Illustrative comparison, not a model evaluation. A genuine Qini curve
-          requires treatment assignments, outcomes, and individual
-          treatment-effect predictions.
+          These evaluations are not available yet. A valid evaluation
+          requires customer-level treatment-effect predictions and
+          appropriate evaluation data. No illustrative curves are shown.
         </p>
-
-        {qiniPreview.length > 1 ? (
-          <Plot
-            data={[
-              {
-                x: qiniPreview.map(point => point.population),
-                y: qiniPreview.map(point => point.model),
-                type: 'scatter',
-                mode: 'lines+markers',
-                name: 'Illustrative model score',
-                line: { color: '#2563eb', width: 3 },
-                hovertemplate:
-                  'Customers selected: %{x:.1f}%<br>' +
-                  'Illustrative score: %{y:.2f}<extra></extra>'
-              },
-              {
-                x: qiniPreview.map(point => point.population),
-                y: qiniPreview.map(point => point.baseline),
-                type: 'scatter',
-                mode: 'lines',
-                name: 'Illustrative reference',
-                line: { color: '#64748b', dash: 'dash', width: 2 },
-                hovertemplate:
-                  'Customers selected: %{x:.1f}%<br>' +
-                  'Reference score: %{y:.2f}<extra></extra>'
-              }
-            ]}
-            layout={{
-              ...baseLayout,
-              title: { text: 'Qini Curve — Illustrative Preview' },
-              height: 350,
-              xaxis: {
-                ...baseLayout.xaxis,
-                title: { text: 'Customers Selected (%)' },
-                range: [0, 100]
-              },
-              yaxis: {
-                ...baseLayout.yaxis,
-                title: { text: 'Illustrative Score' }
-              }
-            }}
-            config={plotConfig}
-            useResizeHandler
-            style={chartStyle}
-          />
-        ) : (
-          <p>
-            At least two valid Price and Sales rows are required for this
-            preview.
-          </p>
-        )}
       </section>
 
-      {/* Customer-level treatment effects */}
-      <section className='panel'>
+      <section className="panel">
         <h2>Customer-Level Treatment Effects</h2>
-        <p>Individual treatment-effect predictions returned by the model.</p>
-
-        {displayCustomers.length > 0 ? (
-          <div style={{ overflowX: 'auto' }}>
-            <table className='results-table'>
-              <thead>
-                <tr>
-                  <th>Customer ID</th>
-                  <th>Treatment Effect</th>
-                  <th>Treatment Prediction</th>
-                  <th>Control Prediction</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {displayCustomers.map((customer, index) => (
-                  <tr key={index}>
-                    <td>
-                      {getField(customer, [
-                        'customer_id',
-                        'customerid',
-                        'id'
-                      ]) ?? `Row ${index + 1}`}
-                    </td>
-                    <td>
-                      {hasCustomerResults
-                        ? displayValue(
-                            getField(customer, [
-                              'treatment_effect',
-                              'treatmenteffect',
-                              'uplift'
-                            ])
-                          )
-                        : 'Not calculated'}
-                    </td>
-                    <td>
-                      {displayValue(
-                        getField(customer, [
-                          'treatment_prediction',
-                          'treatmentprediction',
-                          'mu1'
-                        ])
-                      )}
-                    </td>
-                    <td>
-                      {displayValue(
-                        getField(customer, [
-                          'control_prediction',
-                          'controlprediction',
-                          'mu0'
-                        ])
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p>
-            No customer-level predictions are available. Connect the model API
-            to display results here.
-          </p>
-        )}
-      </section>
-
-      {/* Model status */}
-      <section className='panel'>
-        <h2>Model Status</h2>
         <p>
-          <strong>Status:</strong>{' '}
-          {hasCustomerResults
-            ? 'Customer predictions available'
-            : 'Waiting for model results'}
+          Individual treatment-effect predictions have not been
+          implemented yet. The adjusted promotion estimate above is a
+          population-level estimate, not an individual prediction.
         </p>
       </section>
     </div>
