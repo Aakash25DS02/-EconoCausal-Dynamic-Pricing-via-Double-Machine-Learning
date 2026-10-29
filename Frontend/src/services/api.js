@@ -25,3 +25,8 @@ export function getDataPreview() {
 export function getPromotionEffect() {
   return request('/analysis/promotion-effect')
 }
+
+
+export function getPromotionEffectDML() {
+  return request('/analysis/promotion-effect-dml')
+}
