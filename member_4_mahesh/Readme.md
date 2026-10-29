@@ -4,20 +4,22 @@
 
 
 
-# Member 4 — Data Processing and Discount Optimization
+# EconoCausal — Member 4
+
+## Role
+Data Pipeline and Discount Optimization
 
 ## Responsibilities
+- Load retail customer data.
+- Validate required columns, values, and customer IDs.
+- Prepare clean data for causal machine learning.
+- Build a budget-constrained discount allocation optimizer.
+- Test preprocessing and optimization functionality.
 
-This module prepares retail customer data for causal analysis and
-optimizes discount offers subject to a marketing budget.
-
-## Components
-
-### Data processing
-- `data_processing/data_loader.py`: Loads and saves CSV datasets.
-- `data_processing/data_validator.py`: Validates required columns,
-  numeric values, customer IDs, treatment labels, and outcomes.
-- `data_processing/preprocessing.py`: Prepares features, treatment,
-  and outcome variables for causal ML.
-### Optimization
-- `optimization/objective.py`: Creates the profit-maximization objective.
+## Project Structure
+- `data_processing/data_loader.py`: load and save datasets.
+- `data_processing/data_validator.py`: validate input data.
+- `data_processing/preprocessing.py`: prepare data for causal ML.
+- `optimization/objective.py`: maximize incremental profit.
+- `optimization/constraints.py`: budget and customer constraints.
+- `optimization/discount_optimizer.py`: optimize offer selection.
