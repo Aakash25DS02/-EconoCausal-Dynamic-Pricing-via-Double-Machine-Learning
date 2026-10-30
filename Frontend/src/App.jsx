@@ -1,5 +1,5 @@
 ﻿
-import { useState, useEffect, lazy, Suspense } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import DataUpload from './pages/DataUpload.jsx'
 import BudgetSettings from './pages/BudgetSettings.jsx'
 import BudgetAllocation from './pages/BudgetAllocation.jsx'
@@ -23,60 +23,58 @@ export default function App() {
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [lastUpdated, setLastUpdated] = useState(null)
 
-  useEffect(() => {
-    let cancelled = false
+  const loadBackendData = useCallback(async () => {
+    setLoading(true)
+    setError(null)
 
-    async function loadBackendData() {
-      setLoading(true)
-      setError(null)
+    try {
+      const health = await getHealth()
 
-      try {
-        const health = await getHealth()
-
-        if (!cancelled) {
-          setApiStatus(
-            health.status === 'ok' ? 'Connected' : 'Unavailable'
-          )
-        }
-
-        const [summaryData, previewData] = await Promise.all([
-          getDataSummary(),
-          getDataPreview()
-        ])
-
-        if (!cancelled) {
-          setSummary(summaryData)
-
-          setDataset({
-            ...summaryData,
-            records: Array.isArray(previewData.records)
-              ? previewData.records
-              : []
-          })
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setApiStatus('Disconnected')
-          setError(
-            err instanceof Error
-              ? err.message
-              : 'Unable to connect to the backend.'
-          )
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
+      if (health.status !== 'ok') {
+        throw new Error('Backend health check failed.')
       }
-    }
 
-    loadBackendData()
+      const [summaryData, previewData] = await Promise.all([
+        getDataSummary(),
+        getDataPreview()
+      ])
 
-    return () => {
-      cancelled = true
+      if (
+        !summaryData ||
+        !Array.isArray(summaryData.columns) ||
+        !previewData
+      ) {
+        throw new Error('The backend returned an invalid dataset response.')
+      }
+
+      setApiStatus('Connected')
+      setSummary(summaryData)
+
+      setDataset({
+        ...summaryData,
+        records: Array.isArray(previewData.records)
+          ? previewData.records
+          : []
+      })
+
+      setLastUpdated(new Date())
+    } catch (err) {
+      setApiStatus('Disconnected')
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to connect to the backend.'
+      )
+    } finally {
+      setLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    loadBackendData()
+  }, [loadBackendData])
 
   const menuItems = [
     'Dashboard',
@@ -120,12 +118,13 @@ export default function App() {
             <h1>{activePage}</h1>
             <p>Dynamic Pricing via Double Machine Learning</p>
           </div>
+
           <span className="status">
             Backend: {apiStatus}
           </span>
         </header>
 
-        {error && (
+        {error && activePage !== 'Dashboard' && (
           <div role="alert" className="panel">
             Backend connection error: {error}
           </div>
@@ -137,6 +136,10 @@ export default function App() {
             dataset={dataset}
             summary={summary}
             loading={loading}
+            error={error}
+            apiStatus={apiStatus}
+            lastUpdated={lastUpdated}
+            onRefresh={loadBackendData}
           />
         )}
 

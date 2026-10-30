@@ -804,3 +804,79 @@ form .primary-button {
   background-color: #f8fafc;
   font-weight: 600;
 }
+
+
+/* Dashboard refresh and status improvements */
+
+.welcome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.refresh-button {
+  padding: 11px 18px;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.refresh-button:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.refresh-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dashboard-update {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.dashboard-update p {
+  margin-bottom: 0;
+}
+
+.connection-status.connected {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.connection-status.disconnected {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.loading-message {
+  color: #2563eb;
+  font-weight: 500;
+}
+
+.error-message {
+  border-left: 4px solid #dc2626;
+  color: #b91c1c;
+}
+
+@media (max-width: 600px) {
+  .welcome {
+    align-items: flex-start;
+  }
+
+  .refresh-button {
+    width: 100%;
+  }
+
+  .dashboard-update {
+    flex-direction: column;
+  }
+}
