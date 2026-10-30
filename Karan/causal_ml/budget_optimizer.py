@@ -2,62 +2,63 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import minimize
 
 
-def test_optimized_discounts():
-    root = Path(__file__).resolve().parents[2]
-    input_path = root / "data" / "treatment_effects.csv"
-    output_path = root / "data" / "optimized_discounts.csv"
+def main():
+    project_root = Path(__file__).resolve().parents[2]
+    input_path = project_root / "data" / "treatment_effects.csv"
 
-    source = pd.read_csv(input_path)
-    result = pd.read_csv(output_path)
+    df = pd.read_csv(input_path)
+    df = df.dropna(subset=["discount", "estimated_effect"]).copy()
 
-    # Check output row count
-    assert len(result) == len(source), "Row count changed"
+    if df.empty:
+        raise ValueError("No valid treatment-effect rows found.")
 
-    # Check required columns
-    required = {
-        "discount",
-        "estimated_effect",
-        "optimized_discount",
-        "discount_change",
-    }
-    missing = required - set(result.columns)
-    assert not missing, f"Missing columns: {sorted(missing)}"
+    # Simplified model: discount is the budget cost per customer.
+    # The objective maximizes the sum of estimated effects, subject
+    # to a total discount budget and each observed discount's bounds.
+    effects = df["estimated_effect"].to_numpy(dtype=float)
+    initial_discounts = df["discount"].to_numpy(dtype=float)
 
-    # Check for missing and non-finite values
-    numeric_cols = ["discount", "estimated_effect", "optimized_discount"]
-    assert result[numeric_cols].notna().all().all(), (
-        "Missing values found in optimization results"
+    budget = float(initial_discounts.sum())
+
+    def objective(discounts):
+        return -float(np.dot(discounts, effects))
+
+    constraints = [
+        {
+            "type": "ineq",
+            "fun": lambda discounts: budget - float(discounts.sum()),
+        }
+    ]
+
+    result = minimize(
+        objective,
+        x0=initial_discounts,
+        method="SLSQP",
+        bounds=[(0.0, 0.35)] * len(df),
+        constraints=constraints,
     )
-    assert np.isfinite(result[numeric_cols].to_numpy(dtype=float)).all(), (
-        "Non-finite values found in optimization results"
-    )
 
-    # Check discount bounds: 0% to 35%
-    assert result["optimized_discount"].between(0.0, 0.35).all(), (
-        "Optimized discount outside 0–35% bounds"
-    )
+    if not result.success:
+        raise RuntimeError(f"Optimization failed: {result.message}")
 
-    # Check total discount budget constraint
-    budget = source["discount"].sum()
-    allocated = result["optimized_discount"].sum()
-    assert allocated <= budget + 1e-5, "Budget constraint exceeded"
+    df["optimized_discount"] = result.x
+    df["discount_change"] = (
+    df["optimized_discount"] - df["discount"]
+)
 
-    # Check negative-effect rows receive zero optimized discount
-    negative_effect_rows = result[result["estimated_effect"] < 0]
-    assert (
-        negative_effect_rows["optimized_discount"] <= 1e-8
-    ).all(), "Negative-effect rows should receive zero optimized discount"
+    output_path = project_root / "data" / "optimized_discounts.csv"
+    df.to_csv(output_path, index=False)
 
-    # Check discount change calculation
-    expected_change = result["optimized_discount"] - result["discount"]
-    assert np.allclose(
-        result["discount_change"], expected_change, atol=1e-8
-    ), "Discount changes are incorrect"
-
-    print("All optimizer validation checks passed.")
+    print("Budget optimization completed.")
+    print(f"Customers/rows optimized: {len(df)}")
+    print(f"Discount budget: {budget:.4f}")
+    print(f"Optimized budget used: {result.x.sum():.4f}")
+    print(f"Estimated effect objective: {-result.fun:.6f}")
+    print(f"Results saved to: {output_path}")
 
 
 if __name__ == "__main__":
-    test_optimized_discounts()
+    main()
