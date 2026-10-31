@@ -442,3 +442,228 @@ def data_preview():
     return {
         "records": df.head(10).to_dict(orient="records")
     }
+
+
+from pydantic import BaseModel, Field
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression
+import heapq
+
+
+class AllocationRequest(BaseModel):
+    budget: float = Field(gt=0)
+
+
+@app.post("/allocation/optimize")
+def optimize_budget_allocation(request: AllocationRequest):
+    try:
+        df = load_dataset()
+
+        required = [
+            "customer_id",
+            "price",
+            "discount",
+            "competitor_price",
+            "promotion",
+            "season",
+            "purchase",
+        ]
+
+        missing = [column for column in required if column not in df.columns]
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Dataset is missing columns: {missing}",
+            )
+
+        # Prepare the historical dataset.
+        data = df[required].dropna().copy()
+
+        if data.empty or data["purchase"].nunique() < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="The dataset must contain both purchase outcomes (0 and 1).",
+            )
+
+        numeric_features = [
+            "price",
+            "competitor_price",
+            "promotion",
+            "discount",
+        ]
+
+        preprocessor = ColumnTransformer(
+            transformers=[
+                ("numeric", "passthrough", numeric_features),
+                ("season", OneHotEncoder(handle_unknown="ignore"), ["season"]),
+            ]
+        )
+
+        model = Pipeline(
+            steps=[
+                ("preprocessor", preprocessor),
+                ("classifier", LogisticRegression(max_iter=1000)),
+            ]
+        )
+
+        features = data[numeric_features + ["season"]]
+        target = data["purchase"].astype(int)
+
+        model.fit(features, target)
+
+        # Evaluate discount choices from 0% to 35%.
+        discount_levels = np.round(np.arange(0, 0.351, 0.01), 2)
+
+        customer_count = len(data)
+        discount_count = len(discount_levels)
+
+        candidate_rows = data.loc[
+            data.index.repeat(discount_count)
+        ].copy()
+
+        candidate_rows["discount"] = np.tile(
+            discount_levels, customer_count
+        )
+
+        candidate_features = candidate_rows[
+            numeric_features + ["season"]
+        ]
+
+        probabilities = model.predict_proba(candidate_features)[:, 1]
+        probability_matrix = probabilities.reshape(
+            customer_count, discount_count
+        )
+
+        prices = data["price"].to_numpy()
+
+        # Expected purchases and expected discount expenditure.
+        expected_spend = (
+            probability_matrix
+            * prices[:, None]
+            * discount_levels[None, :]
+        )
+
+        # Begin with a 0% discount for every customer.
+        chosen_levels = np.zeros(customer_count, dtype=int)
+        remaining_budget = float(request.budget)
+
+        # Greedy allocation: choose the next discount increase
+        # with the highest predicted purchase improvement per rupee.
+        allocation_heap = []
+
+        def add_next_option(customer_index):
+            current_level = chosen_levels[customer_index]
+            next_level = current_level + 1
+
+            if next_level >= discount_count:
+                return
+
+            purchase_gain = (
+                probability_matrix[customer_index, next_level]
+                - probability_matrix[customer_index, current_level]
+            )
+
+            spend_increase = (
+                expected_spend[customer_index, next_level]
+                - expected_spend[customer_index, current_level]
+            )
+
+            if purchase_gain > 0 and spend_increase > 0:
+                ratio = purchase_gain / spend_increase
+                heapq.heappush(
+                    allocation_heap,
+                    (-ratio, customer_index, next_level, spend_increase),
+                )
+
+        for customer_index in range(customer_count):
+            add_next_option(customer_index)
+
+        while allocation_heap:
+            _, customer_index, next_level, spend_increase = (
+                heapq.heappop(allocation_heap)
+            )
+
+            if spend_increase > remaining_budget:
+                continue
+
+            chosen_levels[customer_index] = next_level
+            remaining_budget -= spend_increase
+
+            add_next_option(customer_index)
+
+        selected_rows = np.arange(customer_count)
+        selected_probabilities = probability_matrix[
+            selected_rows, chosen_levels
+        ]
+        selected_spend = expected_spend[
+            selected_rows, chosen_levels
+        ]
+
+        baseline_purchases = float(
+            probability_matrix[:, 0].sum()
+        )
+        recommended_purchases = float(
+            selected_probabilities.sum()
+        )
+        total_expected_spend = float(selected_spend.sum())
+
+        allocation = []
+
+        for index, (_, customer) in enumerate(data.iterrows()):
+            allocation.append({
+                "customer_id": int(customer["customer_id"]),
+                "price": round(float(prices[index]), 2),
+                "recommended_discount": round(
+                    float(discount_levels[chosen_levels[index]]), 2
+                ),
+                "predicted_purchase_probability": round(
+                    float(selected_probabilities[index]), 4
+                ),
+                "expected_discount_spend": round(
+                    float(selected_spend[index]), 2
+                ),
+            })
+
+        allocation.sort(
+            key=lambda item: item["recommended_discount"],
+            reverse=True,
+        )
+
+        return {
+            "status": "success",
+            "method": "Greedy budget allocation heuristic",
+            "budget": round(float(request.budget), 2),
+            "expected_discount_spend": round(total_expected_spend, 2),
+            "remaining_budget": round(
+                max(0.0, float(request.budget) - total_expected_spend), 2
+            ),
+            "budget_utilization_percent": round(
+                (total_expected_spend / float(request.budget)) * 100, 2
+            ),
+            "baseline_expected_purchases": round(baseline_purchases, 2),
+            "recommended_expected_purchases": round(
+                recommended_purchases, 2
+            ),
+            "expected_purchase_improvement": round(
+                recommended_purchases - baseline_purchases, 2
+            ),
+            "customer_count": customer_count,
+            "allocations": allocation,
+            "note": (
+                "Predictions are based on the available dataset. "
+                "Expected discount spend assumes a discount is incurred "
+                "only when a customer makes a purchase. This is an "
+                "illustrative model-based estimate, not a causal or "
+                "profit guarantee. The greedy method is a heuristic."
+            ),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Allocation failed: {str(error)}",
+        )

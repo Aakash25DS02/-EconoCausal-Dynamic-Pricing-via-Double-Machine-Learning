@@ -30,3 +30,23 @@ export function getPromotionEffect() {
 export function getPromotionEffectDML() {
   return request('/analysis/promotion-effect-dml')
 }
+
+export async function optimizeBudgetAllocation(budget) {
+  const response = await fetch(`${API_BASE_URL}/allocation/optimize`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ budget: Number(budget) })
+  })
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    throw new Error(
+      data.detail || `Allocation request failed: ${response.status}`
+    )
+  }
+
+  return data
+}
