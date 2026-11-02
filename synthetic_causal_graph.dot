@@ -1,0 +1,18 @@
+digraph SyntheticEconoCausal {
+    rankdir=LR;
+    node [shape=box, style="rounded,filled", fontname="Arial"];
+
+    Price [label="Price", fillcolor="lightblue"];
+    CompetitorPrice [label="Competitor Price", fillcolor="lightblue"];
+    Promotion [label="Promotion", fillcolor="lightblue"];
+    Season [label="Season", fillcolor="lightblue"];
+    Discount [label="Discount (Treatment)", fillcolor="gold"];
+    Purchase [label="Purchase (Outcome)", fillcolor="lightgreen"];
+
+    Price -> CompetitorPrice;
+    Price -> Purchase;
+    CompetitorPrice -> Purchase;
+    Promotion -> Purchase;
+    Season -> Purchase;
+    Discount -> Purchase;
+}

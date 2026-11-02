@@ -1,0 +1,21 @@
+digraph EconoCausal {
+    rankdir=LR;
+    node [shape=box, style="rounded,filled", fontname="Arial"];
+
+    Price [fillcolor="lightblue"];
+    CompetitorPrice [label="Competitor Price", fillcolor="lightblue"];
+    Promotion [fillcolor="lightblue"];
+    Season [fillcolor="lightblue"];
+    Discount [fillcolor="gold"];
+    Purchase [fillcolor="lightgreen"];
+
+    Price -> Discount;
+    Price -> Purchase;
+    CompetitorPrice -> Discount;
+    CompetitorPrice -> Purchase;
+    Promotion -> Discount;
+    Promotion -> Purchase;
+    Season -> Discount;
+    Season -> Purchase;
+    Discount -> Purchase;
+}
