@@ -19,8 +19,9 @@ EconoCausal uses DML-style methods to estimate the relationship between discount
 - Predictive discount scenario comparison across 36 discount levels.
 - FastAPI backend for accessing project functionality.
 - Dataset summary and preview endpoints.
-- Automated tests for model, API, and data validation.
-- Causal analysis and discount budget optimization modules.
+- Promotion-effect analysis using adjusted and DML-style methods.
+- Budget-constrained discount allocation module.
+- Automated tests for models, APIs, and data validation.
 - Frontend dashboard for project interaction.
 
 ## Technology Stack
@@ -38,23 +39,23 @@ EconoCausal uses DML-style methods to estimate the relationship between discount
 ```text
 EconoCausal/
 ├── Frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   └── services/
-│   ├── package.json
-│   └── index.html
-├── Karan/
-│   └── causal_ml/
 ├── app/
-├── backend/
+│   └── main.py
 ├── backend-local/
+│   ├── data/
+│   ├── main.py
+│   ├── requirements.txt
+│   └── test_main.py
 ├── data/
+├── Karan/
 ├── member_4_mahesh/
 ├── shared/
 ├── dml_model.py
 ├── discount_optimizer.py
+├── generate_data.py
 ├── test_api.py
+├── test_api_validation.py
+├── test_discount_optimizer.py
 ├── test_dml_model.py
 ├── API_DOCUMENTATION.md
 ├── PROJECT_OVERVIEW.md
@@ -75,40 +76,80 @@ git clone https://github.com/Aakash25DS02/-EconoCausal-Dynamic-Pricing-via-Doubl
 cd -EconoCausal-Dynamic-Pricing-via-Double-Machine-Learning
 ```
 
-### 3. Install Backend Dependencies
+## Run the Original Backend
+
+The original backend is located in the `app/` directory.
+
+### Install Dependencies
 
 ```bash
-python -m pip install -r backend/requirements.txt
+python -m pip install fastapi uvicorn pandas numpy scikit-learn
 ```
 
-## Run the Backend Application
+### Start the Application
 
-Start the FastAPI server:
+Run from the project root:
 
 ```bash
 python -m uvicorn app.main:app --reload
 ```
 
-Open these URLs in your browser:
+### Original Backend API Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/` | Project information |
+| GET | `/health` | API health check |
+| GET | `/data/summary` | Dataset summary |
+| GET | `/data/preview` | Dataset preview |
+| GET | `/discount/recommendation` | Discount scenario recommendation |
+
+## Run the Integrated Backend
+
+The integrated backend is located in `backend-local/`.
+
+### Install Dependencies
+
+From the project root:
+
+```bash
+python -m pip install -r backend-local/requirements.txt
+```
+
+### Start the Application
+
+Run from the project root:
+
+```bash
+python -m uvicorn main:app --app-dir backend-local --reload
+```
+
+### Integrated Backend API Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/` | Project information |
+| GET | `/health` | API health check |
+| GET | `/data/summary` | Dataset summary |
+| GET | `/data/preview` | Dataset preview |
+| GET | `/analysis/promotion-effect` | Promotion effect analysis |
+| GET | `/analysis/promotion-effect-dml` | DML promotion effect analysis |
+| POST | `/allocation/optimize` | Budget-constrained discount allocation |
+
+## API Documentation
+
+After starting either backend, open:
 
 - API documentation: http://127.0.0.1:8000/docs
 - Health check: http://127.0.0.1:8000/health
 
-## API Endpoints
-
-| Endpoint | Description |
-|---|---|
-| `/` | Project welcome endpoint |
-| `/health` | API health check |
-| `/data/summary` | Dataset summary |
-| `/data/preview` | Dataset preview |
-| `/discount/recommendation` | Discount scenario recommendation |
+Only one backend should use port 8000 at a time unless a different port is configured.
 
 ## Week 3: Discount Budget Optimization
 
 ### Objective
 
-Build a constrained optimization module that allocates customer discounts using treatment-effect estimates from the Week 2 causal inference pipeline.
+Build a constrained optimization module that allocates customer discounts using treatment-effect estimates from the causal inference pipeline.
 
 ### Implementation
 
@@ -135,10 +176,20 @@ The current objective is a simplified treatment-effect-based proxy. It does not 
 
 ## Run Automated Tests
 
-Run the backend tests with:
+### Original Backend Tests
+
+Run from the project root:
 
 ```bash
 python -m unittest test_dml_model.py test_api.py test_api_validation.py test_discount_optimizer.py -v
+```
+
+### Integrated Backend Tests
+
+Run from the project root:
+
+```bash
+python -m unittest discover -s backend-local -p "test_main.py" -v
 ```
 
 ## Important Model Limitations
