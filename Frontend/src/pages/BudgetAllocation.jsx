@@ -129,9 +129,9 @@ export default function BudgetAllocation ({ budget }) {
         selectedDiscount === 'all' ||
         Number(item.recommended_discount).toFixed(2) === selectedDiscount
 
-      const matchesSearch = String(item.customer_id)
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase())
+      const matchesSearch =
+        searchTerm.trim() === '' ||
+        String(item.customer_id).trim() === searchTerm.trim()
 
       return matchesDiscount && matchesSearch
     })
