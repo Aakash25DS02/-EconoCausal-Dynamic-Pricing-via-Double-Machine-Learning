@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
-
 import Papa from 'papaparse'
 
-export default function DataUpload ({ dataset, onDatasetLoaded }) {
+export default function DataUpload({ dataset, onDatasetLoaded }) {
   const [fileName, setFileName] = useState('')
   const [columns, setColumns] = useState([])
   const [rows, setRows] = useState([])
@@ -11,80 +10,79 @@ export default function DataUpload ({ dataset, onDatasetLoaded }) {
   const [error, setError] = useState('')
   const [rowCount, setRowCount] = useState(0)
 
-  
-useEffect(() => {
-  if (!dataset) return
+  useEffect(() => {
+    if (!dataset) return
 
-  // Support both uploaded CSV data and backend API data.
-  const dataRows = Array.isArray(dataset.rows)
-    ? dataset.rows
-    : Array.isArray(dataset.records)
-      ? dataset.records
+    // Support both uploaded CSV data and backend API data.
+    const dataRows = Array.isArray(dataset.rows)
+      ? dataset.rows
+      : Array.isArray(dataset.records)
+        ? dataset.records
+        : []
+
+    const dataColumns = Array.isArray(dataset.columns)
+      ? dataset.columns
       : []
 
-  const dataColumns = Array.isArray(dataset.columns)
-    ? dataset.columns
-    : []
-
-  setFileName(
-    dataset.fileName ||
-    (dataset.dataset_path
-      ? dataset.dataset_path.split(/[\\/]/).pop()
-      : 'pricing_data.csv')
-  )
-
-  setColumns(dataColumns)
-  setRows(dataRows.slice(0, 5))
-  setRowCount(
-    dataset.rowCount ??
-    (typeof dataset.rows === 'number'
-      ? dataset.rows
-      : dataRows.length)
-  )
-
-  const missing = {}
-  const stats = {}
-
-  dataColumns.forEach(column => {
-    const values = dataRows.map(row =>
-      String(row[column] ?? '').trim()
+    setFileName(
+      dataset.fileName ||
+      (dataset.dataset_path
+        ? dataset.dataset_path.split(/[\\/]/).pop()
+        : 'pricing_data.csv')
     )
 
-    missing[column] = values.filter(
-      value => value === ''
-    ).length
+    setColumns(dataColumns)
+    setRows(dataRows.slice(0, 5))
 
-    const numericValues = values
-      .filter(value => value !== '')
-      .map(Number)
+    setRowCount(
+      dataset.rowCount ??
+      (typeof dataset.rows === 'number'
+        ? dataset.rows
+        : dataRows.length)
+    )
 
-    const allNumeric =
-      numericValues.length > 0 &&
-      values.every(
-        value =>
-          value === '' ||
-          Number.isFinite(Number(value))
+    const missing = {}
+    const stats = {}
+
+    dataColumns.forEach(column => {
+      const values = dataRows.map(row =>
+        String(row[column] ?? '').trim()
       )
 
-    if (allNumeric) {
-      stats[column] = {
-        min: Math.min(...numericValues),
-        max: Math.max(...numericValues),
-        average:
-          numericValues.reduce(
-            (total, value) => total + value,
-            0
-          ) / numericValues.length
+      missing[column] = values.filter(
+        value => value === ''
+      ).length
+
+      const numericValues = values
+        .filter(value => value !== '')
+        .map(Number)
+
+      const allNumeric =
+        numericValues.length > 0 &&
+        values.every(
+          value =>
+            value === '' ||
+            Number.isFinite(Number(value))
+        )
+
+      if (allNumeric) {
+        stats[column] = {
+          min: Math.min(...numericValues),
+          max: Math.max(...numericValues),
+          average:
+            numericValues.reduce(
+              (total, value) => total + value,
+              0
+            ) / numericValues.length
+        }
       }
-    }
-  })
+    })
 
-  setMissingValues(missing)
-  setStatistics(stats)
-}, [dataset])
+    setMissingValues(missing)
+    setStatistics(stats)
+  }, [dataset])
 
-
-  function handleFileChange (event) {
+  function handleFileChange(event) {
     const file = event.target.files[0]
 
     setError('')
@@ -105,40 +103,44 @@ useEffect(() => {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
+
       transformHeader: (() => {
         const seen = new Set()
-        let duplicateFound = false
 
-        const transform = header => {
+        return header => {
           const cleaned = header.trim()
 
           if (seen.has(cleaned.toLowerCase())) {
-            duplicateFound = true
+            return cleaned
           }
 
           seen.add(cleaned.toLowerCase())
           return cleaned
         }
-
-        transform.hasDuplicates = () => duplicateFound
-        return transform
       })(),
 
       complete: result => {
         if (result.meta.renamedHeaders) {
-          setError('Duplicate column names were found. Please rename them.')
+          setError(
+            'Duplicate column names were found. Please rename them.'
+          )
           return
         }
+
         const data = result.data
         const headers = result.meta.fields || []
 
         if (result.errors.length > 0) {
-          setError('Some CSV rows could not be parsed. Please check your file.')
+          setError(
+            'Some CSV rows could not be parsed. Please check your file.'
+          )
           return
         }
 
         if (headers.length === 0 || data.length === 0) {
-          setError('The CSV must contain column headings and data rows.')
+          setError(
+            'The CSV must contain column headings and data rows.'
+          )
           return
         }
 
@@ -148,7 +150,9 @@ useEffect(() => {
         }
 
         if (new Set(headers).size !== headers.length) {
-          setError('Duplicate column names were found. Please rename them.')
+          setError(
+            'Duplicate column names were found. Please rename them.'
+          )
           return
         }
 
@@ -156,21 +160,31 @@ useEffect(() => {
         const stats = {}
 
         headers.forEach(column => {
-          const values = data.map(row => String(row[column] ?? '').trim())
+          const values = data.map(row =>
+            String(row[column] ?? '').trim()
+          )
 
-          missing[column] = values.filter(value => value === '').length
+          missing[column] = values.filter(
+            value => value === ''
+          ).length
 
-          const numericValues = values.filter(value => value !== '').map(Number)
+          const numericValues = values
+            .filter(value => value !== '')
+            .map(Number)
 
           const allNumeric =
             numericValues.length > 0 &&
             values.every(
-              value => value === '' || Number.isFinite(Number(value))
+              value =>
+                value === '' ||
+                Number.isFinite(Number(value))
             )
 
           if (allNumeric) {
-            const sorted = [...numericValues].sort((a, b) => a - b)
-            const sum = numericValues.reduce((total, n) => total + n, 0)
+            const sum = numericValues.reduce(
+              (total, value) => total + value,
+              0
+            )
 
             stats[column] = {
               min: Math.min(...numericValues),
@@ -208,14 +222,21 @@ useEffect(() => {
     0
   )
 
-  const hasPrice = columns.some(column => column.toLowerCase() === 'price')
+  const hasPrice = columns.some(
+    column => column.toLowerCase() === 'price'
+  )
 
-  const hasSales = columns.some(column => column.toLowerCase() === 'sales')
+  const hasPurchase = columns.some(
+    column => column.toLowerCase() === 'purchase'
+  )
 
   return (
     <section className='panel'>
       <h2>Upload Pricing Dataset</h2>
-      <p>Upload your CSV to inspect its structure and data quality.</p>
+
+      <p>
+        Upload your CSV to inspect its structure and data quality.
+      </p>
 
       <input type='file' onChange={handleFileChange} />
 
@@ -250,17 +271,19 @@ useEffect(() => {
 
           <div className='panel'>
             <h3>Required Column Check</h3>
+
             <p>
               {hasPrice ? '✓' : '✗'} Price column{' '}
               {hasPrice ? 'found' : 'missing'}
             </p>
+
             <p>
-              {hasSales ? '✓' : '✗'} Sales column{' '}
-              {hasSales ? 'found' : 'missing'}
+              {hasPurchase ? '✓' : '✗'} Purchase column{' '}
+              {hasPurchase ? 'found' : 'missing'}
             </p>
 
             <p>
-              {hasPrice && hasSales
+              {hasPrice && hasPurchase
                 ? 'Basic column check passed. Further model-specific validation is still needed.'
                 : 'Please check the column names before model integration.'}
             </p>
@@ -270,18 +293,26 @@ useEffect(() => {
             <h3>Missing Values by Column</h3>
 
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <table
+                style={{
+                  width: '100%',
+                  borderCollapse: 'collapse'
+                }}
+              >
                 <thead>
                   <tr>
                     <th style={cellStyle}>Column</th>
                     <th style={cellStyle}>Missing Values</th>
                   </tr>
                 </thead>
+
                 <tbody>
                   {columns.map(column => (
                     <tr key={column}>
                       <td style={cellStyle}>{column}</td>
-                      <td style={cellStyle}>{missingValues[column]}</td>
+                      <td style={cellStyle}>
+                        {missingValues[column]}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -296,7 +327,12 @@ useEffect(() => {
               <p>No numeric columns detected.</p>
             ) : (
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table
+                  style={{
+                    width: '100%',
+                    borderCollapse: 'collapse'
+                  }}
+                >
                   <thead>
                     <tr>
                       <th style={cellStyle}>Column</th>
@@ -305,15 +341,24 @@ useEffect(() => {
                       <th style={cellStyle}>Average</th>
                     </tr>
                   </thead>
+
                   <tbody>
-                    {Object.entries(statistics).map(([column, stat]) => (
-                      <tr key={column}>
-                        <td style={cellStyle}>{column}</td>
-                        <td style={cellStyle}>{stat.min.toFixed(2)}</td>
-                        <td style={cellStyle}>{stat.max.toFixed(2)}</td>
-                        <td style={cellStyle}>{stat.average.toFixed(2)}</td>
-                      </tr>
-                    ))}
+                    {Object.entries(statistics).map(
+                      ([column, stat]) => (
+                        <tr key={column}>
+                          <td style={cellStyle}>{column}</td>
+                          <td style={cellStyle}>
+                            {stat.min.toFixed(2)}
+                          </td>
+                          <td style={cellStyle}>
+                            {stat.max.toFixed(2)}
+                          </td>
+                          <td style={cellStyle}>
+                            {stat.average.toFixed(2)}
+                          </td>
+                        </tr>
+                      )
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -322,12 +367,18 @@ useEffect(() => {
 
           <div className='panel'>
             <h3>Dataset Preview</h3>
+
             <p>
               Showing the first {rows.length} of {rowCount} rows.
             </p>
 
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <table
+                style={{
+                  width: '100%',
+                  borderCollapse: 'collapse'
+                }}
+              >
                 <thead>
                   <tr>
                     {columns.map(column => (
@@ -337,6 +388,7 @@ useEffect(() => {
                     ))}
                   </tr>
                 </thead>
+
                 <tbody>
                   {rows.map((row, index) => (
                     <tr key={index}>
