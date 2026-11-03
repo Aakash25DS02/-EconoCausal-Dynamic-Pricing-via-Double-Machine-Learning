@@ -42,6 +42,11 @@ export default function BudgetAllocation ({ budget }) {
   const [selectedDiscount, setSelectedDiscount] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
 
+  const [sortConfig, setSortConfig] = useState({
+    key: 'customer_id',
+    direction: 'asc'
+  })
+
   const hasBudget = Number.isFinite(Number(budget)) && Number(budget) > 0
 
   useEffect(() => {
@@ -136,6 +141,35 @@ export default function BudgetAllocation ({ budget }) {
       return matchesDiscount && matchesSearch
     })
   }, [allocationData, selectedDiscount, searchTerm])
+
+  const sortedAllocations = useMemo(() => {
+    return [...filteredAllocations].sort((a, b) => {
+      const { key, direction } = sortConfig
+
+      const valueA = a[key]
+      const valueB = b[key]
+
+      let comparison
+
+      if (key === 'customer_id') {
+        comparison = String(valueA).localeCompare(String(valueB), undefined, {
+          numeric: true
+        })
+      } else {
+        comparison = Number(valueA) - Number(valueB)
+      }
+
+      return direction === 'asc' ? comparison : -comparison
+    })
+  }, [filteredAllocations, sortConfig])
+
+  function handleSort (key) {
+    setSortConfig(current => ({
+      key,
+      direction:
+        current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+    }))
+  }
 
   const groupedDiscountSummary = useMemo(() => {
     const ranges = [
@@ -374,16 +408,52 @@ export default function BudgetAllocation ({ budget }) {
           >
             <thead>
               <tr>
-                <th>Customer ID</th>
-                <th>Price</th>
-                <th>Recommended Discount</th>
-                <th>Predicted Purchase Probability</th>
-                <th>Expected Discount Spend</th>
+                <th title='Unique identifier of the customer'>
+                  <button
+                    type='button'
+                    onClick={() => handleSort('customer_id')}
+                  >
+                    Customer ID
+                  </button>
+                </th>
+
+                <th title='Original customer price'>
+                  <button type='button' onClick={() => handleSort('price')}>
+                    Price
+                  </button>
+                </th>
+
+                <th title='Discount recommended by the allocation model'>
+                  <button
+                    type='button'
+                    onClick={() => handleSort('recommended_discount')}
+                  >
+                    Recommended Discount
+                  </button>
+                </th>
+
+                <th title='Model-estimated probability of a customer making a purchase'>
+                  <button
+                    type='button'
+                    onClick={() => handleSort('predicted_purchase_probability')}
+                  >
+                    Predicted Purchase Probability
+                  </button>
+                </th>
+
+                <th title='Estimated discount expenditure for this customer'>
+                  <button
+                    type='button'
+                    onClick={() => handleSort('expected_discount_spend')}
+                  >
+                    Expected Discount Spend
+                  </button>
+                </th>
               </tr>
             </thead>
 
             <tbody>
-              {filteredAllocations.map(item => (
+              {sortedAllocations.map(item => (
                 <tr key={item.customer_id}>
                   <td>{item.customer_id}</td>
                   <td>{formatCurrency(item.price)}</td>
