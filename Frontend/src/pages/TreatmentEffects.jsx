@@ -7,6 +7,11 @@ export default function TreatmentEffects ({
   loading = false,
   error = null
 }) {
+  const uploadedRecords =
+    dataset?.fileName && Array.isArray(dataset?.rows)
+      ? dataset.rows
+      : null
+
   const [analysis, setAnalysis] = useState(null)
   const [dmlAnalysis, setDmlAnalysis] = useState(null)
   const [analysisLoading, setAnalysisLoading] = useState(true)
@@ -14,64 +19,56 @@ export default function TreatmentEffects ({
   const [analysisError, setAnalysisError] = useState('')
   const [dmlError, setDmlError] = useState('')
 
+  
   useEffect(() => {
     let cancelled = false
 
-    async function loadAdjustedAnalysis () {
+    async function loadAnalysis() {
       setAnalysisLoading(true)
-      setAnalysisError('')
-
-      try {
-        const result = await getPromotionEffect()
-
-        if (!cancelled) {
-          setAnalysis(result)
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setAnalysisError(
-            err instanceof Error
-              ? err.message
-              : 'Unable to load adjusted analysis.'
-          )
-        }
-      } finally {
-        if (!cancelled) {
-          setAnalysisLoading(false)
-        }
-      }
-    }
-
-    async function loadDMLAnalysis () {
       setDmlLoading(true)
+      setAnalysisError('')
       setDmlError('')
 
-      try {
-        const result = await getPromotionEffectDML()
+      const [adjustedResult, dmlResult] = await Promise.allSettled([
+        getPromotionEffect(uploadedRecords),
+        getPromotionEffectDML(uploadedRecords)
+      ])
 
-        if (!cancelled) {
-          setDmlAnalysis(result)
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setDmlError(
-            err instanceof Error ? err.message : 'Unable to load DML analysis.'
-          )
-        }
-      } finally {
-        if (!cancelled) {
-          setDmlLoading(false)
-        }
+      if (cancelled) return
+
+      if (adjustedResult.status === 'fulfilled') {
+        setAnalysis(adjustedResult.value)
+      } else {
+        setAnalysis(null)
+        setAnalysisError(
+          adjustedResult.reason instanceof Error
+            ? adjustedResult.reason.message
+            : 'Unable to load adjusted analysis.'
+        )
       }
+
+      if (dmlResult.status === 'fulfilled') {
+        setDmlAnalysis(dmlResult.value)
+      } else {
+        setDmlAnalysis(null)
+        setDmlError(
+          dmlResult.reason instanceof Error
+            ? dmlResult.reason.message
+            : 'Unable to load DML analysis.'
+        )
+      }
+
+      setAnalysisLoading(false)
+      setDmlLoading(false)
     }
 
-    loadAdjustedAnalysis()
-    loadDMLAnalysis()
+    loadAnalysis()
 
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [uploadedRecords])
+
 
   const rows = Array.isArray(dataset?.rows)
     ? dataset.rows

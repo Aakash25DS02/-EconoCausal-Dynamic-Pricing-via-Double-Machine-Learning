@@ -35,7 +35,9 @@ function formatDiscount (value) {
   return `${(Number(value) * 100).toFixed(0)}%`
 }
 
-export default function BudgetAllocation ({ budget }) {
+export default function BudgetAllocation ({ budget, dataset }) {
+  const uploadedRecords =
+    dataset?.fileName && Array.isArray(dataset?.rows) ? dataset.rows : null
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -64,8 +66,7 @@ export default function BudgetAllocation ({ budget }) {
       setResult(null)
 
       try {
-        const data = await optimizeBudgetAllocation(budget)
-
+        const data = await optimizeBudgetAllocation(budget, uploadedRecords)
         if (isActive) {
           setResult(data)
         }
@@ -89,7 +90,7 @@ export default function BudgetAllocation ({ budget }) {
     return () => {
       isActive = false
     }
-  }, [budget, hasBudget])
+  }, [budget, hasBudget, uploadedRecords])
 
   const allocationData = useMemo(() => {
     if (!result?.allocations) return []

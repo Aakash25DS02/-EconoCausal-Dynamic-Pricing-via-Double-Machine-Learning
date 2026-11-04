@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI(
     title="EconoCausal API",
@@ -38,6 +39,14 @@ DATA_PATH = next(
     (path for path in DATA_CANDIDATES if path.exists()),
     PROJECT_DIR / "data" / "pricing_data.csv",
 )
+
+class DatasetRequest(BaseModel):
+    records: list[dict]
+
+
+class AllocationRequest(BaseModel):
+    budget: float = Field(gt=0)
+    records: list[dict] | None = None
 
 REQUIRED_COLUMNS = [
     "price",
@@ -89,6 +98,37 @@ def load_dataset() -> pd.DataFrame:
 
     return df
 
+def load_request_dataset(records: list[dict] | None) -> pd.DataFrame:
+    # Use the original CSV when no uploaded records are supplied.
+    if not records:
+        return load_dataset()
+
+    try:
+        df = pd.DataFrame(records)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Could not process uploaded dataset: {exc}",
+        ) from exc
+
+    if df.empty:
+        raise HTTPException(
+            status_code=422,
+            detail="The uploaded dataset contains no records.",
+        )
+
+    missing_columns = [
+        column for column in REQUIRED_COLUMNS
+        if column not in df.columns
+    ]
+
+    if missing_columns:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Uploaded dataset is missing required columns: {missing_columns}",
+        )
+
+    return df
 
 @app.get("/")
 def root():
@@ -126,9 +166,9 @@ def data_summary():
         ],
     }
 
-@app.get("/analysis/promotion-effect")
-def promotion_effect():
-    df = load_dataset().copy()
+@app.post("/analysis/promotion-effect")
+def promotion_effect(request: DatasetRequest):
+    df = load_request_dataset(request.records).copy()
 
     required = [
         "promotion",
@@ -271,12 +311,12 @@ def promotion_effect():
     }
 
 
-@app.get("/analysis/promotion-effect-dml")
-def promotion_effect_dml():
+@app.post("/analysis/promotion-effect-dml")
+def promotion_effect_dml(request: DatasetRequest):
     from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
     from sklearn.model_selection import StratifiedKFold
 
-    df = load_dataset().copy()
+    df = load_request_dataset(request.records).copy()
 
     required = [
         "promotion",
@@ -444,7 +484,7 @@ def data_preview():
     }
 
 
-from pydantic import BaseModel, Field
+
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.pipeline import Pipeline
@@ -452,14 +492,11 @@ from sklearn.linear_model import LogisticRegression
 import heapq
 
 
-class AllocationRequest(BaseModel):
-    budget: float = Field(gt=0)
-
 
 @app.post("/allocation/optimize")
 def optimize_budget_allocation(request: AllocationRequest):
     try:
-        df = load_dataset()
+        df = load_request_dataset(request.records)
 
         required = [
             "customer_id",
@@ -479,7 +516,37 @@ def optimize_budget_allocation(request: AllocationRequest):
             )
 
         # Prepare the historical dataset.
-        data = df[required].dropna().copy()
+        # Prepare the historical dataset.
+data = df[required].copy()
+
+# Convert numeric columns to numeric data types.
+numeric_columns = [
+    "customer_id",
+    "price",
+    "discount",
+    "competitor_price",
+    "promotion",
+    "purchase",
+]
+
+for column in numeric_columns:
+    data[column] = pd.to_numeric(data[column], errors="coerce")
+
+# Remove rows containing missing or invalid values.
+data = data.dropna().copy()
+
+# Convert customer ID and purchase to integers.
+data["customer_id"] = data["customer_id"].astype(int)
+data["purchase"] = data["purchase"].astype(int)
+
+# Ensure purchase contains only 0 and 1.
+data = data[data["purchase"].isin([0, 1])].copy()
+
+if data.empty or data["purchase"].nunique() < 2:
+    raise HTTPException(
+        status_code=400,
+        detail="The dataset must contain both purchase outcomes (0 and 1).",
+    )
 
         if data.empty or data["purchase"].nunique() < 2:
             raise HTTPException(
