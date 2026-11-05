@@ -483,7 +483,522 @@ def data_preview():
         "records": df.head(10).to_dict(orient="records")
     }
 
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_auc_score
 
+
+@app.post("/analysis/uplift-evaluation")
+def uplift_evaluation(request: DatasetRequest):
+    try:
+        df = load_request_dataset(request.records).copy()
+
+        required = [
+            "customer_id",
+            "price",
+            "discount",
+            "competitor_price",
+            "promotion",
+            "season",
+            "purchase",
+            "sales",
+        ]
+
+        missing = [
+            column
+            for column in required
+            if column not in df.columns
+        ]
+
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Dataset is missing columns: {missing}",
+            )
+
+        data = df[required].copy()
+
+        # Convert numeric columns.
+        numeric_columns = [
+            "customer_id",
+            "price",
+            "discount",
+            "competitor_price",
+            "promotion",
+            "purchase",
+            "sales",
+        ]
+
+        for column in numeric_columns:
+            data[column] = pd.to_numeric(
+                data[column],
+                errors="coerce",
+            )
+
+        # Remove invalid rows.
+        data = data.dropna().copy()
+
+        if data.empty:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid records are available for uplift evaluation.",
+            )
+
+        # Validate treatment.
+        data["promotion"] = data["promotion"].astype(int)
+
+        data = data[
+            data["promotion"].isin([0, 1])
+        ].copy()
+
+        # Validate purchase.
+        data["purchase"] = data["purchase"].astype(int)
+
+        data = data[
+            data["purchase"].isin([0, 1])
+        ].copy()
+
+        if data["promotion"].nunique() < 2:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "The dataset must contain both treated "
+                    "and control customers."
+                ),
+            )
+
+        if data["purchase"].nunique() < 2:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "The dataset must contain both purchase outcomes "
+                    "(0 and 1)."
+                ),
+            )
+
+        # Sales must be non-negative.
+        data["sales"] = data["sales"].clip(lower=0)
+
+        # Features used for treatment-effect prediction.
+        feature_columns = [
+            "price",
+            "discount",
+            "competitor_price",
+            "season",
+        ]
+
+        X = data[feature_columns].copy()
+
+        # Encode categorical season.
+        X = pd.get_dummies(
+            X,
+            columns=["season"],
+            drop_first=False,
+        )
+
+        X = X.astype(float)
+
+        treatment = data["promotion"].to_numpy()
+
+        purchase_outcome = data["purchase"].to_numpy(
+            dtype=float
+        )
+
+        sales_outcome = data["sales"].to_numpy(
+            dtype=float
+        )
+
+        # ---------------------------------------------------------
+        # Customer-level treatment effect for PURCHASE
+        # ---------------------------------------------------------
+
+        purchase_treated_model = RandomForestClassifier(
+            n_estimators=200,
+            random_state=42,
+            min_samples_leaf=2,
+        )
+
+        purchase_control_model = RandomForestClassifier(
+            n_estimators=200,
+            random_state=42,
+            min_samples_leaf=2,
+        )
+
+        treated_mask = treatment == 1
+        control_mask = treatment == 0
+
+        if treated_mask.sum() < 2 or control_mask.sum() < 2:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "At least two treated and two control records "
+                    "are required for uplift evaluation."
+                ),
+            )
+
+        purchase_treated_model.fit(
+            X.loc[treated_mask],
+            purchase_outcome[treated_mask],
+        )
+
+        purchase_control_model.fit(
+            X.loc[control_mask],
+            purchase_outcome[control_mask],
+        )
+
+        purchase_treated_probability = (
+            purchase_treated_model.predict_proba(X)[:, 1]
+        )
+
+        purchase_control_probability = (
+            purchase_control_model.predict_proba(X)[:, 1]
+        )
+
+        purchase_treatment_effect = (
+            purchase_treated_probability
+            - purchase_control_probability
+        )
+
+        # ---------------------------------------------------------
+        # Customer-level treatment effect for SALES
+        # ---------------------------------------------------------
+
+        sales_treated_model = RandomForestRegressor(
+            n_estimators=200,
+            random_state=42,
+            min_samples_leaf=2,
+        )
+
+        sales_control_model = RandomForestRegressor(
+            n_estimators=200,
+            random_state=42,
+            min_samples_leaf=2,
+        )
+
+        sales_treated_model.fit(
+            X.loc[treated_mask],
+            sales_outcome[treated_mask],
+        )
+
+        sales_control_model.fit(
+            X.loc[control_mask],
+            sales_outcome[control_mask],
+        )
+
+        sales_treated_prediction = (
+            sales_treated_model.predict(X)
+        )
+
+        sales_control_prediction = (
+            sales_control_model.predict(X)
+        )
+
+        sales_treatment_effect = (
+            sales_treated_prediction
+            - sales_control_prediction
+        )
+
+        # ---------------------------------------------------------
+        # Build customer-level results
+        # ---------------------------------------------------------
+
+        results = pd.DataFrame({
+            "customer_id": data["customer_id"].astype(int),
+            "promotion": treatment,
+            "purchase": purchase_outcome.astype(int),
+            "sales": sales_outcome,
+            "purchase_treatment_effect":
+                purchase_treatment_effect,
+            "sales_treatment_effect":
+                sales_treatment_effect,
+        })
+
+        # Rank customers by predicted purchase uplift.
+        results = results.sort_values(
+            "purchase_treatment_effect",
+            ascending=False,
+        ).reset_index(drop=True)
+
+        # ---------------------------------------------------------
+        # Uplift curve
+        # ---------------------------------------------------------
+
+        total_treated = (
+            results["promotion"] == 1
+        ).sum()
+
+        total_control = (
+            results["promotion"] == 0
+        ).sum()
+
+        if total_treated == 0 or total_control == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Both treatment groups are required.",
+            )
+
+        cumulative_treated = (
+            (results["promotion"] == 1)
+            & (results["purchase"] == 1)
+        ).cumsum()
+
+        cumulative_control = (
+            (results["promotion"] == 0)
+            & (results["purchase"] == 1)
+        ).cumsum()
+
+        treated_count = (
+            (results["promotion"] == 1)
+            .cumsum()
+        )
+
+        control_count = (
+            (results["promotion"] == 0)
+            .cumsum()
+        )
+
+        uplift = (
+            cumulative_treated
+            - (
+                cumulative_control
+                * treated_count
+                / control_count.replace(0, np.nan)
+            )
+        )
+
+        uplift = uplift.fillna(0)
+
+        population = np.arange(
+            1,
+            len(results) + 1,
+        )
+
+        population_percentage = (
+            population / len(results) * 100
+        )
+
+        # ---------------------------------------------------------
+        # Qini curve
+        # ---------------------------------------------------------
+
+        qini = uplift.copy()
+
+        qini_area = float(
+            np.trapezoid(
+                qini.to_numpy(),
+                population_percentage,
+            )
+        )
+
+        auuc = float(
+            np.trapezoid(
+                uplift.to_numpy(),
+                population_percentage,
+            )
+        )
+
+        # ---------------------------------------------------------
+        # Sales uplift
+        # ---------------------------------------------------------
+
+        cumulative_treated_sales = (
+            results["sales"]
+            .where(results["promotion"] == 1, 0)
+            .cumsum()
+        )
+
+        cumulative_control_sales = (
+            results["sales"]
+            .where(results["promotion"] == 0, 0)
+            .cumsum()
+        )
+
+        sales_uplift = (
+            cumulative_treated_sales
+            - (
+                cumulative_control_sales
+                * treated_count
+                / control_count.replace(0, np.nan)
+            )
+        )
+
+        sales_uplift = sales_uplift.fillna(0)
+
+        # ---------------------------------------------------------
+        # Evaluation data
+        # ---------------------------------------------------------
+
+        uplift_curve = []
+
+        qini_curve = []
+
+        sales_uplift_curve = []
+
+        for index in range(len(results)):
+            uplift_curve.append({
+                "population_percent":
+                    round(
+                        float(
+                            population_percentage[index]
+                        ),
+                        2,
+                    ),
+                "uplift":
+                    round(
+                        float(
+                            uplift.iloc[index]
+                        ),
+                        4,
+                    ),
+            })
+
+            qini_curve.append({
+                "population_percent":
+                    round(
+                        float(
+                            population_percentage[index]
+                        ),
+                        2,
+                    ),
+                "qini":
+                    round(
+                        float(
+                            qini.iloc[index]
+                        ),
+                        4,
+                    ),
+            })
+
+            sales_uplift_curve.append({
+                "population_percent":
+                    round(
+                        float(
+                            population_percentage[index]
+                        ),
+                        2,
+                    ),
+                "sales_uplift":
+                    round(
+                        float(
+                            sales_uplift.iloc[index]
+                        ),
+                        2,
+                    ),
+            })
+
+        # ---------------------------------------------------------
+        # Customer-level output
+        # ---------------------------------------------------------
+
+        customer_results = []
+
+        for _, row in results.iterrows():
+            customer_results.append({
+                "customer_id":
+                    int(row["customer_id"]),
+
+                "promotion":
+                    int(row["promotion"]),
+
+                "purchase":
+                    int(row["purchase"]),
+
+                "sales":
+                    round(
+                        float(row["sales"]),
+                        2,
+                    ),
+
+                "purchase_treatment_effect":
+                    round(
+                        float(
+                            row[
+                                "purchase_treatment_effect"
+                            ]
+                        ),
+                        4,
+                    ),
+
+                "sales_treatment_effect":
+                    round(
+                        float(
+                            row[
+                                "sales_treatment_effect"
+                            ]
+                        ),
+                        2,
+                    ),
+            })
+
+        return {
+            "status": "success",
+
+            "customer_count":
+                len(results),
+
+            "treated_count":
+                int(total_treated),
+
+            "control_count":
+                int(total_control),
+
+            "metrics": {
+                "auuc":
+                    round(auuc, 4),
+
+                "qini_area":
+                    round(qini_area, 4),
+
+                "average_purchase_treatment_effect":
+                    round(
+                        float(
+                            results[
+                                "purchase_treatment_effect"
+                            ].mean()
+                        ),
+                        4,
+                    ),
+
+                "average_sales_treatment_effect":
+                    round(
+                        float(
+                            results[
+                                "sales_treatment_effect"
+                            ].mean()
+                        ),
+                        2,
+                    ),
+            },
+
+            "uplift_curve":
+                uplift_curve,
+
+            "qini_curve":
+                qini_curve,
+
+            "sales_uplift_curve":
+                sales_uplift_curve,
+
+            "customer_treatment_effects":
+                customer_results,
+
+            "note": (
+                "Treatment effects are model-based estimates. "
+                "Uplift and Qini evaluation use observed outcomes "
+                "and model-based customer ranking. Because the "
+                "dataset is observational, these results should "
+                "not be interpreted as proof of causal effects."
+            ),
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Uplift evaluation failed: {str(error)}",
+        )
 
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder
@@ -509,6 +1024,7 @@ def optimize_budget_allocation(request: AllocationRequest):
         ]
 
         missing = [column for column in required if column not in df.columns]
+
         if missing:
             raise HTTPException(
                 status_code=400,
@@ -516,42 +1032,41 @@ def optimize_budget_allocation(request: AllocationRequest):
             )
 
         # Prepare the historical dataset.
-        # Prepare the historical dataset.
-data = df[required].copy()
+        data = df[required].copy()
 
-# Convert numeric columns to numeric data types.
-numeric_columns = [
-    "customer_id",
-    "price",
-    "discount",
-    "competitor_price",
-    "promotion",
-    "purchase",
-]
+        # Convert numeric columns to numeric data types.
+        numeric_columns = [
+            "customer_id",
+            "price",
+            "discount",
+            "competitor_price",
+            "promotion",
+            "purchase",
+        ]
 
-for column in numeric_columns:
-    data[column] = pd.to_numeric(data[column], errors="coerce")
+        for column in numeric_columns:
+            data[column] = pd.to_numeric(
+                data[column],
+                errors="coerce"
+            )
 
-# Remove rows containing missing or invalid values.
-data = data.dropna().copy()
+        # Remove rows containing missing or invalid values.
+        data = data.dropna().copy()
 
-# Convert customer ID and purchase to integers.
-data["customer_id"] = data["customer_id"].astype(int)
-data["purchase"] = data["purchase"].astype(int)
+        # Convert ID and binary outcome to integers.
+        data["customer_id"] = data["customer_id"].astype(int)
+        data["purchase"] = data["purchase"].astype(int)
 
-# Ensure purchase contains only 0 and 1.
-data = data[data["purchase"].isin([0, 1])].copy()
-
-if data.empty or data["purchase"].nunique() < 2:
-    raise HTTPException(
-        status_code=400,
-        detail="The dataset must contain both purchase outcomes (0 and 1).",
-    )
+        # Keep only valid binary purchase outcomes.
+        data = data[data["purchase"].isin([0, 1])].copy()
 
         if data.empty or data["purchase"].nunique() < 2:
             raise HTTPException(
                 status_code=400,
-                detail="The dataset must contain both purchase outcomes (0 and 1).",
+                detail=(
+                    "The dataset must contain both purchase outcomes "
+                    "(0 and 1)."
+                ),
             )
 
         numeric_features = [
@@ -563,15 +1078,26 @@ if data.empty or data["purchase"].nunique() < 2:
 
         preprocessor = ColumnTransformer(
             transformers=[
-                ("numeric", "passthrough", numeric_features),
-                ("season", OneHotEncoder(handle_unknown="ignore"), ["season"]),
+                (
+                    "numeric",
+                    "passthrough",
+                    numeric_features,
+                ),
+                (
+                    "season",
+                    OneHotEncoder(handle_unknown="ignore"),
+                    ["season"],
+                ),
             ]
         )
 
         model = Pipeline(
             steps=[
                 ("preprocessor", preprocessor),
-                ("classifier", LogisticRegression(max_iter=1000)),
+                (
+                    "classifier",
+                    LogisticRegression(max_iter=1000),
+                ),
             ]
         )
 
@@ -581,7 +1107,10 @@ if data.empty or data["purchase"].nunique() < 2:
         model.fit(features, target)
 
         # Evaluate discount choices from 0% to 35%.
-        discount_levels = np.round(np.arange(0, 0.351, 0.01), 2)
+        discount_levels = np.round(
+            np.arange(0, 0.351, 0.01),
+            2,
+        )
 
         customer_count = len(data)
         discount_count = len(discount_levels)
@@ -591,19 +1120,28 @@ if data.empty or data["purchase"].nunique() < 2:
         ].copy()
 
         candidate_rows["discount"] = np.tile(
-            discount_levels, customer_count
+            discount_levels,
+            customer_count,
         )
 
         candidate_features = candidate_rows[
             numeric_features + ["season"]
         ]
 
-        probabilities = model.predict_proba(candidate_features)[:, 1]
+        probabilities = model.predict_proba(
+            candidate_features
+        )[:, 1]
+
         probability_matrix = probabilities.reshape(
-            customer_count, discount_count
+            customer_count,
+            discount_count,
         )
 
-        prices = data["price"].to_numpy()
+        # Make sure prices are numeric.
+        prices = pd.to_numeric(
+            data["price"],
+            errors="coerce",
+        ).to_numpy(dtype=float)
 
         # Expected purchases and expected discount expenditure.
         expected_spend = (
@@ -613,7 +1151,11 @@ if data.empty or data["purchase"].nunique() < 2:
         )
 
         # Begin with a 0% discount for every customer.
-        chosen_levels = np.zeros(customer_count, dtype=int)
+        chosen_levels = np.zeros(
+            customer_count,
+            dtype=int,
+        )
+
         remaining_budget = float(request.budget)
 
         # Greedy allocation: choose the next discount increase
@@ -628,29 +1170,50 @@ if data.empty or data["purchase"].nunique() < 2:
                 return
 
             purchase_gain = (
-                probability_matrix[customer_index, next_level]
-                - probability_matrix[customer_index, current_level]
+                probability_matrix[
+                    customer_index,
+                    next_level,
+                ]
+                - probability_matrix[
+                    customer_index,
+                    current_level,
+                ]
             )
 
             spend_increase = (
-                expected_spend[customer_index, next_level]
-                - expected_spend[customer_index, current_level]
+                expected_spend[
+                    customer_index,
+                    next_level,
+                ]
+                - expected_spend[
+                    customer_index,
+                    current_level,
+                ]
             )
 
             if purchase_gain > 0 and spend_increase > 0:
                 ratio = purchase_gain / spend_increase
+
                 heapq.heappush(
                     allocation_heap,
-                    (-ratio, customer_index, next_level, spend_increase),
+                    (
+                        -ratio,
+                        customer_index,
+                        next_level,
+                        spend_increase,
+                    ),
                 )
 
         for customer_index in range(customer_count):
             add_next_option(customer_index)
 
         while allocation_heap:
-            _, customer_index, next_level, spend_increase = (
-                heapq.heappop(allocation_heap)
-            )
+            (
+                _,
+                customer_index,
+                next_level,
+                spend_increase,
+            ) = heapq.heappop(allocation_heap)
 
             if spend_increase > remaining_budget:
                 continue
@@ -661,37 +1224,65 @@ if data.empty or data["purchase"].nunique() < 2:
             add_next_option(customer_index)
 
         selected_rows = np.arange(customer_count)
+
         selected_probabilities = probability_matrix[
-            selected_rows, chosen_levels
+            selected_rows,
+            chosen_levels,
         ]
+
         selected_spend = expected_spend[
-            selected_rows, chosen_levels
+            selected_rows,
+            chosen_levels,
         ]
 
         baseline_purchases = float(
             probability_matrix[:, 0].sum()
         )
+
         recommended_purchases = float(
             selected_probabilities.sum()
         )
-        total_expected_spend = float(selected_spend.sum())
+
+        total_expected_spend = float(
+            selected_spend.sum()
+        )
 
         allocation = []
 
-        for index, (_, customer) in enumerate(data.iterrows()):
-            allocation.append({
-                "customer_id": int(customer["customer_id"]),
-                "price": round(float(prices[index]), 2),
-                "recommended_discount": round(
-                    float(discount_levels[chosen_levels[index]]), 2
-                ),
-                "predicted_purchase_probability": round(
-                    float(selected_probabilities[index]), 4
-                ),
-                "expected_discount_spend": round(
-                    float(selected_spend[index]), 2
-                ),
-            })
+        for index, (_, customer) in enumerate(
+            data.iterrows()
+        ):
+            allocation.append(
+                {
+                    "customer_id": int(
+                        customer["customer_id"]
+                    ),
+                    "price": round(
+                        float(prices[index]),
+                        2,
+                    ),
+                    "recommended_discount": round(
+                        float(
+                            discount_levels[
+                                chosen_levels[index]
+                            ]
+                        ),
+                        2,
+                    ),
+                    "predicted_purchase_probability": round(
+                        float(
+                            selected_probabilities[index]
+                        ),
+                        4,
+                    ),
+                    "expected_discount_spend": round(
+                        float(
+                            selected_spend[index]
+                        ),
+                        2,
+                    ),
+                }
+            )
 
         allocation.sort(
             key=lambda item: item["recommended_discount"],
@@ -701,20 +1292,42 @@ if data.empty or data["purchase"].nunique() < 2:
         return {
             "status": "success",
             "method": "Greedy budget allocation heuristic",
-            "budget": round(float(request.budget), 2),
-            "expected_discount_spend": round(total_expected_spend, 2),
+            "budget": round(
+                float(request.budget),
+                2,
+            ),
+            "expected_discount_spend": round(
+                total_expected_spend,
+                2,
+            ),
             "remaining_budget": round(
-                max(0.0, float(request.budget) - total_expected_spend), 2
+                max(
+                    0.0,
+                    float(request.budget)
+                    - total_expected_spend,
+                ),
+                2,
             ),
             "budget_utilization_percent": round(
-                (total_expected_spend / float(request.budget)) * 100, 2
+                (
+                    total_expected_spend
+                    / float(request.budget)
+                )
+                * 100,
+                2,
             ),
-            "baseline_expected_purchases": round(baseline_purchases, 2),
+            "baseline_expected_purchases": round(
+                baseline_purchases,
+                2,
+            ),
             "recommended_expected_purchases": round(
-                recommended_purchases, 2
+                recommended_purchases,
+                2,
             ),
             "expected_purchase_improvement": round(
-                recommended_purchases - baseline_purchases, 2
+                recommended_purchases
+                - baseline_purchases,
+                2,
             ),
             "customer_count": customer_count,
             "allocations": allocation,
@@ -729,6 +1342,7 @@ if data.empty or data["purchase"].nunique() < 2:
 
     except HTTPException:
         raise
+
     except Exception as error:
         raise HTTPException(
             status_code=500,

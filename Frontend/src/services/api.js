@@ -61,3 +61,9 @@ export async function optimizeBudgetAllocation(budget, records = null) {
     records: Array.isArray(records) ? records : null
   })
 }
+
+export function getUpliftEvaluation(records = null) {
+  return postRequest('/analysis/uplift-evaluation', {
+    records: Array.isArray(records) ? records : []
+  })
+}
