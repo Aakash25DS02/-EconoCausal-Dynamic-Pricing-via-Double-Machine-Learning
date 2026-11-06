@@ -41,9 +41,17 @@ export default function App () {
       setApiStatus('Connected')
       setSummary(summaryData)
 
-      setDataset({
-        ...summaryData,
-        records: Array.isArray(previewData.records) ? previewData.records : []
+      setDataset(previousDataset => {
+        // Preserve the uploaded CSV if one has already been loaded.
+        if (previousDataset?.fileName && Array.isArray(previousDataset?.rows)) {
+          return previousDataset
+        }
+
+        // Otherwise use the default backend dataset.
+        return {
+          ...summaryData,
+          records: Array.isArray(previewData.records) ? previewData.records : []
+        }
       })
 
       setLastUpdated(new Date())
