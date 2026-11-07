@@ -4,8 +4,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
 from econml.dml import LinearDML
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.dummy import DummyRegressor
 
 try:
     from .validate_pricing_data import validate_pricing_data
@@ -26,7 +28,9 @@ MAX_DISCOUNT = 0.35
 
 def build_feature_matrix(df, feature_columns=None):
     """Build the same numeric feature matrix for training and inference."""
+
     missing = set(FEATURE_COLUMNS) - set(df.columns)
+
     if missing:
         raise ValueError(f"Missing feature columns: {sorted(missing)}")
 
@@ -54,6 +58,7 @@ class CausalPricingService:
 
     def fit(self, df):
         """Fit the causal model using the supplied historical pricing data."""
+
         required = {
             "customer_id",
             "price",
@@ -65,6 +70,7 @@ class CausalPricingService:
         }
 
         missing = required - set(df.columns)
+
         if missing:
             raise ValueError(f"Missing required columns: {sorted(missing)}")
 
@@ -77,7 +83,9 @@ class CausalPricingService:
             raise ValueError("Customer IDs cannot be missing.")
 
         if not data["customer_id"].is_unique:
-            raise ValueError("Customer IDs must be unique for customer-level ITE.")
+            raise ValueError(
+                "Customer IDs must be unique for customer-level ITE."
+            )
 
         if not validate_pricing_data(data):
             raise ValueError("Pricing dataset validation failed.")
@@ -95,6 +103,7 @@ class CausalPricingService:
         if not np.isfinite(X.to_numpy()).all():
             raise ValueError("Feature matrix contains non-finite values.")
 
+        # Train LinearDML
         self.model = LinearDML(
             model_y=RandomForestRegressor(
                 n_estimators=100,
@@ -102,12 +111,9 @@ class CausalPricingService:
                 random_state=self.random_state,
                 n_jobs=-1,
             ),
-            model_t=RandomForestRegressor(
-                n_estimators=100,
-                min_samples_leaf=10,
-                random_state=self.random_state,
-                n_jobs=-1,
-            ),
+            # Appropriate for the current synthetic data generator,
+            # where discount is independently randomized.
+            model_t=DummyRegressor(strategy="mean"),
             discrete_treatment=False,
             random_state=self.random_state,
         )
@@ -124,29 +130,42 @@ class CausalPricingService:
             "maximum_discount": float(T.max()),
             "feature_count": int(X.shape[1]),
             "model": "EconML LinearDML",
+            "treatment_model": "DummyRegressor",
+            "outcome_model": "RandomForestRegressor",
         }
 
         return self
 
-    def estimate_ite(self, customers, reference_discount=0.0,
-                     target_discount=0.10):
+    def estimate_ite(
+        self,
+        customers,
+        reference_discount=0.0,
+        target_discount=0.10,
+    ):
         """
         Estimate the effect of changing discount from reference to target.
 
         Default comparison: 0% discount versus 10% discount.
-        Effects are changes in predicted purchase probability.
+        Effects represent changes in predicted purchase probability.
         """
+
         if self.model is None:
             raise RuntimeError("Call fit() before estimate_ite().")
 
         if not MIN_DISCOUNT <= reference_discount <= MAX_DISCOUNT:
-            raise ValueError("Reference discount must be between 0 and 0.35.")
+            raise ValueError(
+                "Reference discount must be between 0 and 0.35."
+            )
 
         if not MIN_DISCOUNT <= target_discount <= MAX_DISCOUNT:
-            raise ValueError("Target discount must be between 0 and 0.35.")
+            raise ValueError(
+                "Target discount must be between 0 and 0.35."
+            )
 
         if target_discount <= reference_discount:
-            raise ValueError("Target discount must exceed reference discount.")
+            raise ValueError(
+                "Target discount must exceed reference discount."
+            )
 
         if "customer_id" not in customers.columns:
             raise ValueError("Inference data must contain customer_id.")
@@ -157,7 +176,10 @@ class CausalPricingService:
         if not customers["customer_id"].is_unique:
             raise ValueError("Customer IDs must be unique.")
 
-        X = build_feature_matrix(customers, self.feature_columns)
+        X = build_feature_matrix(
+            customers,
+            self.feature_columns,
+        )
 
         effects = np.asarray(
             self.model.effect(
@@ -168,10 +190,14 @@ class CausalPricingService:
         ).reshape(-1)
 
         if len(effects) != len(customers):
-            raise RuntimeError("Unexpected number of treatment-effect estimates.")
+            raise RuntimeError(
+                "Unexpected number of treatment-effect estimates."
+            )
 
         if not np.isfinite(effects).all():
-            raise RuntimeError("Model generated non-finite treatment effects.")
+            raise RuntimeError(
+                "Model generated non-finite treatment effects."
+            )
 
         results = pd.DataFrame({
             "customer_id": customers["customer_id"].to_numpy(),
@@ -183,11 +209,17 @@ class CausalPricingService:
         return results
 
     def summarize(self, results):
-        """Return a JSON-friendly summary of estimated treatment effects."""
+        """Return a JSON-friendly summary of treatment effects."""
+
+        if "estimated_effect" not in results.columns:
+            raise ValueError("Results must contain estimated_effect.")
+
         effects = results["estimated_effect"].to_numpy(dtype=float)
 
         if len(effects) == 0 or not np.isfinite(effects).all():
-            raise ValueError("Cannot summarize empty or invalid estimates.")
+            raise ValueError(
+                "Cannot summarize empty or invalid estimates."
+            )
 
         return {
             "customer_count": int(len(effects)),
@@ -208,11 +240,14 @@ def run_causal_analysis(
     target_discount=0.10,
 ):
     """Run the complete causal service and save customer-level estimates."""
+
     data_path = Path(data_path)
     output_path = Path(output_path)
 
     if not data_path.exists():
-        raise FileNotFoundError(f"Dataset not found: {data_path}")
+        raise FileNotFoundError(
+            f"Dataset not found: {data_path}"
+        )
 
     customers = pd.read_csv(data_path)
 
@@ -227,7 +262,11 @@ def run_causal_analysis(
 
     summary = service.summarize(results)
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
     results.to_csv(output_path, index=False)
 
     return {
