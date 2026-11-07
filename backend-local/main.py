@@ -5,6 +5,13 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression
+import heapq
+
 app = FastAPI(
     title="EconoCausal API",
     description="Backend for causal discount analysis and budget-aware pricing.",
@@ -313,7 +320,6 @@ def promotion_effect(request: DatasetRequest):
 
 @app.post("/analysis/promotion-effect-dml")
 def promotion_effect_dml(request: DatasetRequest):
-    from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
     from sklearn.model_selection import StratifiedKFold
 
     df = load_request_dataset(request.records).copy()
@@ -483,9 +489,6 @@ def data_preview():
         "records": df.head(10).to_dict(orient="records")
     }
 
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_auc_score
 
 
 @app.post("/analysis/uplift-evaluation")
@@ -781,7 +784,20 @@ def uplift_evaluation(request: DatasetRequest):
         # Qini curve
         # ---------------------------------------------------------
 
-        qini = uplift.copy()
+        # Qini measures the incremental outcome obtained by
+        # targeting customers in the predicted-uplift ranking.
+        # It is calculated using the same cumulative treatment
+        # and control outcomes used for the uplift calculation.
+        qini = (
+            cumulative_treated
+            - (
+                cumulative_control
+                * treated_count
+                / control_count.replace(0, np.nan)
+            )
+        )
+
+        qini = qini.fillna(0)
 
         qini_area = float(
             np.trapezoid(
@@ -796,7 +812,6 @@ def uplift_evaluation(request: DatasetRequest):
                 population_percentage,
             )
         )
-
         # ---------------------------------------------------------
         # Sales uplift
         # ---------------------------------------------------------
@@ -999,12 +1014,6 @@ def uplift_evaluation(request: DatasetRequest):
             status_code=500,
             detail=f"Uplift evaluation failed: {str(error)}",
         )
-
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.pipeline import Pipeline
-from sklearn.linear_model import LogisticRegression
-import heapq
 
 
 

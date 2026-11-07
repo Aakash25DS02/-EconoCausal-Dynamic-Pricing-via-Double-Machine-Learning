@@ -14,10 +14,6 @@ export default function TreatmentEffects ({
   const uploadedRecords =
     dataset?.fileName && Array.isArray(dataset?.rows) ? dataset.rows : null
 
-  console.log('Treatment Effects dataset:', dataset)
-  console.log('Uploaded records:', uploadedRecords)
-  console.log('Uploaded record count:', uploadedRecords?.length)
-
   const [analysis, setAnalysis] = useState(null)
   const [dmlAnalysis, setDmlAnalysis] = useState(null)
   const [analysisLoading, setAnalysisLoading] = useState(true)
