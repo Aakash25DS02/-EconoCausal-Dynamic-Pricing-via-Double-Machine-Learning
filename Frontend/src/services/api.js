@@ -1,3 +1,4 @@
+
 const API_BASE_URL = 'http://127.0.0.1:8000'
 
 async function request(endpoint) {
@@ -8,6 +9,26 @@ async function request(endpoint) {
   }
 
   return response.json()
+}
+
+async function postRequest(endpoint, body) {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  })
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    throw new Error(
+      data.detail || `API request failed: ${response.status}`
+    )
+  }
+
+  return data
 }
 
 export function getHealth() {
@@ -22,31 +43,27 @@ export function getDataPreview() {
   return request('/data/preview')
 }
 
-export function getPromotionEffect() {
-  return request('/analysis/promotion-effect')
-}
-
-
-export function getPromotionEffectDML() {
-  return request('/analysis/promotion-effect-dml')
-}
-
-export async function optimizeBudgetAllocation(budget) {
-  const response = await fetch(`${API_BASE_URL}/allocation/optimize`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ budget: Number(budget) })
+export function getPromotionEffect(records = null) {
+  return postRequest('/analysis/promotion-effect', {
+    records: Array.isArray(records) ? records : []
   })
+}
 
-  const data = await response.json()
+export function getPromotionEffectDML(records = null) {
+  return postRequest('/analysis/promotion-effect-dml', {
+    records: Array.isArray(records) ? records : []
+  })
+}
 
-  if (!response.ok) {
-    throw new Error(
-      data.detail || `Allocation request failed: ${response.status}`
-    )
-  }
+export async function optimizeBudgetAllocation(budget, records = null) {
+  return postRequest('/allocation/optimize', {
+    budget: Number(budget),
+    records: Array.isArray(records) ? records : null
+  })
+}
 
-  return data
+export function getUpliftEvaluation(records = null) {
+  return postRequest('/analysis/uplift-evaluation', {
+    records: Array.isArray(records) ? records : []
+  })
 }
