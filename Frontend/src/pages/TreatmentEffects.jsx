@@ -1,77 +1,113 @@
 import { useEffect, useState } from 'react'
 import Plot from 'react-plotly.js'
-import { getPromotionEffect, getPromotionEffectDML } from '../services/api'
+import {
+  getPromotionEffect,
+  getPromotionEffectDML,
+  getUpliftEvaluation
+} from '../services/api'
 
 export default function TreatmentEffects ({
   dataset,
   loading = false,
   error = null
 }) {
+  const uploadedRecords =
+    dataset?.fileName && Array.isArray(dataset?.rows) ? dataset.rows : null
+
   const [analysis, setAnalysis] = useState(null)
   const [dmlAnalysis, setDmlAnalysis] = useState(null)
   const [analysisLoading, setAnalysisLoading] = useState(true)
   const [dmlLoading, setDmlLoading] = useState(true)
   const [analysisError, setAnalysisError] = useState('')
   const [dmlError, setDmlError] = useState('')
+  const [upliftEvaluation, setUpliftEvaluation] = useState(null)
+  const [upliftLoading, setUpliftLoading] = useState(false)
+  const [upliftError, setUpliftError] = useState('')
 
   useEffect(() => {
     let cancelled = false
 
-    async function loadAdjustedAnalysis () {
+    async function loadAnalysis () {
       setAnalysisLoading(true)
-      setAnalysisError('')
-
-      try {
-        const result = await getPromotionEffect()
-
-        if (!cancelled) {
-          setAnalysis(result)
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setAnalysisError(
-            err instanceof Error
-              ? err.message
-              : 'Unable to load adjusted analysis.'
-          )
-        }
-      } finally {
-        if (!cancelled) {
-          setAnalysisLoading(false)
-        }
-      }
-    }
-
-    async function loadDMLAnalysis () {
       setDmlLoading(true)
+      setAnalysisError('')
       setDmlError('')
 
-      try {
-        const result = await getPromotionEffectDML()
+      const [adjustedResult, dmlResult] = await Promise.allSettled([
+        getPromotionEffect(uploadedRecords),
+        getPromotionEffectDML(uploadedRecords)
+      ])
 
-        if (!cancelled) {
-          setDmlAnalysis(result)
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setDmlError(
-            err instanceof Error ? err.message : 'Unable to load DML analysis.'
-          )
-        }
-      } finally {
-        if (!cancelled) {
-          setDmlLoading(false)
-        }
+      if (cancelled) return
+
+      if (adjustedResult.status === 'fulfilled') {
+        setAnalysis(adjustedResult.value)
+      } else {
+        setAnalysis(null)
+        setAnalysisError(
+          adjustedResult.reason instanceof Error
+            ? adjustedResult.reason.message
+            : 'Unable to load adjusted analysis.'
+        )
       }
+
+      if (dmlResult.status === 'fulfilled') {
+        setDmlAnalysis(dmlResult.value)
+      } else {
+        setDmlAnalysis(null)
+        setDmlError(
+          dmlResult.reason instanceof Error
+            ? dmlResult.reason.message
+            : 'Unable to load DML analysis.'
+        )
+      }
+
+      setAnalysisLoading(false)
+      setDmlLoading(false)
     }
 
-    loadAdjustedAnalysis()
-    loadDMLAnalysis()
+    loadAnalysis()
 
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [uploadedRecords])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadUpliftEvaluation () {
+      setUpliftLoading(true)
+      setUpliftError('')
+
+      try {
+        const result = await getUpliftEvaluation(uploadedRecords)
+
+        if (!cancelled) {
+          setUpliftEvaluation(result)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setUpliftEvaluation(null)
+          setUpliftError(
+            error instanceof Error
+              ? error.message
+              : 'Unable to load uplift evaluation.'
+          )
+        }
+      } finally {
+        if (!cancelled) {
+          setUpliftLoading(false)
+        }
+      }
+    }
+
+    loadUpliftEvaluation()
+
+    return () => {
+      cancelled = true
+    }
+  }, [uploadedRecords])
 
   const rows = Array.isArray(dataset?.rows)
     ? dataset.rows
@@ -423,20 +459,212 @@ export default function TreatmentEffects ({
 
       <section className='panel'>
         <h2>Uplift and Qini Evaluation</h2>
-        <p>
-          These evaluations are not available yet. Valid evaluation requires
-          customer-level treatment-effect predictions and appropriate evaluation
-          data. No illustrative curves are shown.
-        </p>
+
+        {upliftLoading && (
+          <p>Calculating customer-level treatment effects...</p>
+        )}
+
+        {upliftError && <p className='error-message'>{upliftError}</p>}
+
+        {upliftEvaluation && (
+          <>
+            <div className='stats-grid'>
+              <div className='stat-card'>
+                <span>Customers</span>
+                <strong>{upliftEvaluation.customer_count}</strong>
+              </div>
+
+              <div className='stat-card'>
+                <span>Treated</span>
+                <strong>{upliftEvaluation.treated_count}</strong>
+              </div>
+
+              <div className='stat-card'>
+                <span>Control</span>
+                <strong>{upliftEvaluation.control_count}</strong>
+              </div>
+
+              <div className='stat-card'>
+                <span>AUUC</span>
+                <strong>{upliftEvaluation.metrics?.auuc}</strong>
+              </div>
+
+              <div className='stat-card'>
+                <span>Qini Area</span>
+                <strong>{upliftEvaluation.metrics?.qini_area}</strong>
+              </div>
+
+              <div className='stat-card'>
+                <span>Avg Purchase Effect</span>
+                <strong>
+                  {upliftEvaluation.metrics?.average_purchase_treatment_effect}
+                </strong>
+              </div>
+
+              <div className='stat-card'>
+                <span>Avg Sales Effect</span>
+                <strong>
+                  {upliftEvaluation.metrics?.average_sales_treatment_effect}
+                </strong>
+              </div>
+            </div>
+
+            <div className='chart-container'>
+              <h3>Uplift Curve</h3>
+
+              <Plot
+                data={[
+                  {
+                    x: upliftEvaluation.uplift_curve.map(
+                      item => item.population_percent
+                    ),
+                    y: upliftEvaluation.uplift_curve.map(item => item.uplift),
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Uplift'
+                  }
+                ]}
+                layout={{
+                  title: 'Cumulative Uplift Curve',
+                  xaxis: {
+                    title: 'Population Targeted (%)'
+                  },
+                  yaxis: {
+                    title: 'Cumulative Uplift'
+                  },
+                  margin: {
+                    l: 60,
+                    r: 30,
+                    t: 60,
+                    b: 60
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  height: '450px'
+                }}
+                useResizeHandler
+              />
+            </div>
+
+            <div className='chart-container'>
+              <h3>Qini Curve</h3>
+
+              <Plot
+                data={[
+                  {
+                    x: upliftEvaluation.qini_curve.map(
+                      item => item.population_percent
+                    ),
+                    y: upliftEvaluation.qini_curve.map(item => item.qini),
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Qini'
+                  }
+                ]}
+                layout={{
+                  title: 'Qini Curve',
+                  xaxis: {
+                    title: 'Population Targeted (%)'
+                  },
+                  yaxis: {
+                    title: 'Qini Value'
+                  },
+                  margin: {
+                    l: 60,
+                    r: 30,
+                    t: 60,
+                    b: 60
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  height: '450px'
+                }}
+                useResizeHandler
+              />
+            </div>
+
+            <div className='chart-container'>
+              <h3>Sales Uplift Curve</h3>
+
+              <Plot
+                data={[
+                  {
+                    x: upliftEvaluation.sales_uplift_curve.map(
+                      item => item.population_percent
+                    ),
+                    y: upliftEvaluation.sales_uplift_curve.map(
+                      item => item.sales_uplift
+                    ),
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Sales Uplift'
+                  }
+                ]}
+                layout={{
+                  title: 'Cumulative Sales Uplift',
+                  xaxis: {
+                    title: 'Population Targeted (%)'
+                  },
+                  yaxis: {
+                    title: 'Sales Uplift'
+                  },
+                  margin: {
+                    l: 60,
+                    r: 30,
+                    t: 60,
+                    b: 60
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  height: '450px'
+                }}
+                useResizeHandler
+              />
+            </div>
+          </>
+        )}
       </section>
 
       <section className='panel'>
         <h2>Customer-Level Treatment Effects</h2>
-        <p>
-          Individual treatment-effect predictions have not been implemented yet.
-          The estimates above are population-level estimates, not individual
-          predictions.
-        </p>
+
+        {upliftEvaluation?.customer_treatment_effects && (
+          <div className='table-wrapper'>
+            <table>
+              <thead>
+                <tr>
+                  <th>Customer ID</th>
+                  <th>Promotion</th>
+                  <th>Purchase</th>
+                  <th>Sales</th>
+                  <th>Purchase Treatment Effect</th>
+                  <th>Sales Treatment Effect</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {upliftEvaluation.customer_treatment_effects.map(customer => (
+                  <tr key={customer.customer_id}>
+                    <td>{customer.customer_id}</td>
+
+                    <td>{customer.promotion}</td>
+
+                    <td>{customer.purchase}</td>
+
+                    <td>{customer.sales}</td>
+
+                    <td>{customer.purchase_treatment_effect}</td>
+
+                    <td>{customer.sales_treatment_effect}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   )
